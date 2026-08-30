@@ -482,6 +482,28 @@ function pushBurst(state, x, y, color) {
   state.bursts.push({ id: nextId(), parts, color, life: 0.45, max: 0.45 });
 }
 
+/** 스페셜 재료 주위를 도는 반짝이 개수 */
+const SPARKLE_COUNT = 5;
+
+/** 4방향 별 모양 반짝이 */
+function drawSparkle(ctx, x, y, s, alpha) {
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, alpha);
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "rgba(180, 255, 238, 0.95)";
+  ctx.shadowBlur = 10;
+  const w = s * 0.16;
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.quadraticCurveTo(x + w, y - w, x + s, y);
+  ctx.quadraticCurveTo(x + w, y + w, x, y + s);
+  ctx.quadraticCurveTo(x - w, y + w, x - s, y);
+  ctx.quadraticCurveTo(x - w, y - w, x, y - s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 /* ------------------------------------------------------------------ */
 /* 렌더링                                                              */
 /* ------------------------------------------------------------------ */
@@ -508,8 +530,13 @@ function draw(ctx, state, now) {
     const r = def.radius * pulse;
 
     // 밝은 원판 + 번짐: 어두운 밤하늘 위에서도 이모지가 또렷하게 보이도록
+    const isSpecial = def.type === ITEM_TYPES.SPECIAL;
     ctx.shadowColor = GLOW[def.type];
-    ctx.shadowBlur = pulsing ? 26 : 16;
+    ctx.shadowBlur = isSpecial
+      ? 24 + 16 * (0.5 + 0.5 * Math.sin(now / 170))
+      : pulsing
+        ? 26
+        : 16;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fillStyle = DISC[def.type];
@@ -541,6 +568,38 @@ function draw(ctx, state, now) {
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.stroke();
+
+    // 스페셜 재료: 주위를 도는 반짝이 + 표면을 훑고 지나가는 광택
+    if (isSpecial) {
+      const t = now / 1000;
+
+      // 원판 위를 사선으로 쓸고 지나가는 하이라이트
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
+      ctx.clip();
+      const sweep = ((t * 0.55) % 1) * (r * 4) - r * 2;
+      const grad = ctx.createLinearGradient(sweep - r * 0.6, -r, sweep + r * 0.6, r);
+      grad.addColorStop(0, "rgba(255,255,255,0)");
+      grad.addColorStop(0.5, "rgba(255,255,255,0.45)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.restore();
+
+      for (let i = 0; i < SPARKLE_COUNT; i++) {
+        const a = t * 1.5 + ((Math.PI * 2) / SPARKLE_COUNT) * i;
+        const twinkle = 0.45 + 0.55 * Math.sin(t * 5.5 + i * 1.9);
+        if (twinkle <= 0.05) continue;
+        drawSparkle(
+          ctx,
+          Math.cos(a) * (r + 9),
+          Math.sin(a) * (r + 9),
+          8 * twinkle,
+          twinkle
+        );
+      }
+    }
 
     ctx.restore();
   }
