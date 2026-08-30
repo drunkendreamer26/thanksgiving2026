@@ -6,8 +6,9 @@ import NightSky from "@/components/NightSky";
 import MoonScene from "@/components/MoonScene";
 import RankingBoard from "@/components/RankingBoard";
 import InfoModal from "@/components/InfoModal";
+import AdminPanel from "@/components/AdminPanel";
 import { usePlayerName } from "@/components/usePlayerName";
-import { getMyRank, getTopScores } from "@/app/actions";
+import { getBoard } from "@/app/actions";
 import { EVENT_TITLE, GAME_TITLE, formatScore } from "@/lib/constants";
 
 export default function HomeClient({ initialRows, initialError }) {
@@ -18,24 +19,29 @@ export default function HomeClient({ initialRows, initialError }) {
   const [error, setError] = useState(initialError);
   const [myRank, setMyRank] = useState(null);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   const refresh = useCallback(async (playerName) => {
-    const [top, mine] = await Promise.all([
-      getTopScores(),
-      playerName ? getMyRank(playerName) : Promise.resolve(null),
-    ]);
-    if (top.ok) {
-      setRows(top.rows);
+    const board = await getBoard(playerName);
+    if (board.ok) {
+      setRows(board.rows);
       setError(null);
     } else {
-      setError(top.error);
+      setError(board.error);
     }
-    setMyRank(mine?.ok ? mine : null);
+    setMyRank(board.mine);
   }, []);
 
-  // 게임 후 복귀 시에도 랭킹과 내 등수를 최신으로 유지
+  // 서버 컴포넌트가 새로 렌더되면(예: 게임 후 router.refresh) 그 결과를 반영
   useEffect(() => {
-    if (!ready) return;
+    setRows(initialRows);
+    setError(initialError);
+  }, [initialRows, initialError]);
+
+  // 이름이 있을 때만 추가 조회합니다.
+  // 이름이 없으면 서버에서 받아온 랭킹으로 충분하므로 DB 를 다시 치지 않습니다.
+  useEffect(() => {
+    if (!ready || !name) return;
     refresh(name);
   }, [ready, name, refresh]);
 
@@ -57,9 +63,14 @@ export default function HomeClient({ initialRows, initialError }) {
           >
             {EVENT_TITLE}
           </h1>
-          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-moon-500/40 bg-moon-500/10 px-3.5 py-1.5 text-sm font-bold text-moon-300 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setAdminOpen(true)}
+            aria-label={`${GAME_TITLE} (관리자)`}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-moon-500/40 bg-moon-500/10 px-3.5 py-1.5 text-sm font-bold text-moon-300 backdrop-blur-sm transition active:scale-95"
+          >
             🌕 {GAME_TITLE}
-          </p>
+          </button>
         </header>
 
         {/* 달맞이 배너 — 기록 개수와 무관하게 항상 보이는 배경 */}
@@ -118,6 +129,12 @@ export default function HomeClient({ initialRows, initialError }) {
       </div>
 
       <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
+
+      <AdminPanel
+        open={adminOpen}
+        onClose={() => setAdminOpen(false)}
+        onChanged={() => refresh(name)}
+      />
     </main>
   );
 }

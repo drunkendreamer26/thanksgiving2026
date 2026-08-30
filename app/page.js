@@ -1,8 +1,10 @@
 import HomeClient from "@/components/HomeClient";
 import { getTopScores } from "@/app/actions";
 
-// 랭킹은 항상 최신 데이터를 보여줍니다.
-export const dynamic = "force-dynamic";
+// 랭킹을 5초간 캐시합니다. 동시 접속이 몰려도 DB 조회는 5초에 한 번으로 모입니다.
+// 점수가 등록되면 submitScore 의 revalidatePath("/") 가 즉시 무효화하므로
+// 새 기록이 늦게 반영되지는 않습니다.
+export const revalidate = 5;
 
 export default async function HomePage() {
   const top = await getTopScores();

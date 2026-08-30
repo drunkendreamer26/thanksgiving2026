@@ -65,16 +65,15 @@ export async function getMyRank(rawName) {
   if (error) return fail(error.message);
   if (!me || me.score <= 0) return { ok: true, ranked: false, score: me?.score ?? 0 };
 
-  const higher = await supabase
-    .from("scores")
-    .select("*", { count: "exact", head: true })
-    .gt("score", me.score);
-
-  const tiedEarlier = await supabase
-    .from("scores")
-    .select("*", { count: "exact", head: true })
-    .eq("score", me.score)
-    .lt("created_at", me.created_at);
+  // 두 카운트는 서로 독립이므로 병렬로 실행합니다
+  const [higher, tiedEarlier] = await Promise.all([
+    supabase.from("scores").select("*", { count: "exact", head: true }).gt("score", me.score),
+    supabase
+      .from("scores")
+      .select("*", { count: "exact", head: true })
+      .eq("score", me.score)
+      .lt("created_at", me.created_at),
+  ]);
 
   if (higher.error) return fail(higher.error.message);
   if (tiedEarlier.error) return fail(tiedEarlier.error.message);
@@ -86,6 +85,25 @@ export async function getMyRank(rawName) {
     player_name: me.player_name,
     score: me.score,
     created_at: me.created_at,
+  };
+}
+
+/**
+ * 첫 화면에 필요한 데이터를 한 번에 가져옵니다.
+ * 랭킹과 내 등수를 각각 호출하면 서버 액션 왕복이 2회가 되므로 하나로 합쳤습니다.
+ */
+export async function getBoard(rawName) {
+  const name = String(rawName ?? "").trim();
+  const [top, mine] = await Promise.all([
+    getTopScores(),
+    name ? getMyRank(name) : Promise.resolve(null),
+  ]);
+
+  return {
+    ok: top.ok,
+    error: top.ok ? null : top.error,
+    rows: top.ok ? top.rows : [],
+    mine: mine?.ok ? mine : null,
   };
 }
 
@@ -160,5 +178,87 @@ export async function submitScore(rawName, rawScore) {
     updated,
     best: updated ? score : existing.score,
     rank: mine.ok && mine.ranked ? mine.rank : null,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* 관리자 기능                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 관리자 비밀번호 확인.
+ * PASSWORD 는 서버 전용 환경변수라 브라우저로 값이 내려가지 않습니다.
+ * 모든 관리자 액션은 호출할 때마다 이 검사를 다시 거칩니다.
+ */
+function checkAdmin(password) {
+  const expected = process.env.PASSWORD;
+  if (!expected) return "서버에 PASSWORD 환경변수가 설정되지 않았습니다.";
+  if (String(password ?? "") !== expected) return "비밀번호가 일치하지 않습니다.";
+  if (!isAdminConfigured) return "서버 환경변수(SUPABASE_SERVICE_ROLE_KEY)가 설정되지 않았습니다.";
+  return null;
+}
+
+export async function verifyAdmin(password) {
+  const expected = process.env.PASSWORD;
+  if (!expected) return fail("서버에 PASSWORD 환경변수가 설정되지 않았습니다.");
+  if (String(password ?? "") !== expected) return fail("비밀번호가 일치하지 않습니다.");
+  return { ok: true };
+}
+
+/** 전체 기록 삭제 */
+export async function adminResetAll(password) {
+  const error = checkAdmin(password);
+  if (error) return fail(error);
+
+  const before = await supabaseAdmin
+    .from("scores")
+    .select("*", { count: "exact", head: true });
+  if (before.error) return fail(before.error.message);
+
+  // 조건 없는 delete 는 막혀 있어 항상 참인 조건을 붙입니다
+  const { error: delError } = await supabaseAdmin.from("scores").delete().gte("score", 0);
+  if (delError) return fail(delError.message);
+
+  revalidatePath("/");
+  return { ok: true, deleted: before.count ?? 0 };
+}
+
+/** 이름 하나의 기록 삭제 */
+export async function adminDeleteByName(password, rawName) {
+  const error = checkAdmin(password);
+  if (error) return fail(error);
+
+  const key = normalizeName(rawName).toLowerCase();
+  if (!key) return fail("삭제할 이름을 입력해 주세요.");
+
+  const { data, error: delError } = await supabaseAdmin
+    .from("scores")
+    .delete()
+    .eq("player_key", key)
+    .select("player_name, score");
+
+  if (delError) return fail(delError.message);
+  if (!data || data.length === 0) return fail(`'${rawName}' 기록을 찾지 못했습니다.`);
+
+  revalidatePath("/");
+  return { ok: true, removed: data[0] };
+}
+
+/** 전체 순위 내려받기용 데이터 (등수·이름·점수·등록일시) */
+export async function adminExport(password) {
+  const error = checkAdmin(password);
+  if (error) return fail(error);
+
+  const { data, error: readError } = await supabaseAdmin
+    .from("scores")
+    .select("player_name, score, created_at")
+    .order("score", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (readError) return fail(readError.message);
+
+  return {
+    ok: true,
+    rows: (data ?? []).map((row, i) => ({ rank: i + 1, ...row })),
   };
 }
