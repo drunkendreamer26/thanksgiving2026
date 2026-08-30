@@ -15,10 +15,23 @@ import { GAME_DURATION } from "@/lib/constants";
 const EMOJI_FONT =
   '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
 
+// 링 = 테두리, DISC = 이모지 뒤에 까는 밝은 원판, GLOW = 밤하늘에서 떠 보이게 하는 번짐
 const RING = {
-  [ITEM_TYPES.GOOD]: "rgba(255, 213, 79, 0.55)",
-  [ITEM_TYPES.BONUS]: "rgba(255, 248, 225, 0.95)",
-  [ITEM_TYPES.BAD]: "rgba(224, 92, 110, 0.85)",
+  [ITEM_TYPES.GOOD]: "#f5a623",
+  [ITEM_TYPES.BONUS]: "#fff8e1",
+  [ITEM_TYPES.BAD]: "#e05c6e",
+};
+
+const DISC = {
+  [ITEM_TYPES.GOOD]: "rgba(255, 248, 231, 0.95)",
+  [ITEM_TYPES.BONUS]: "rgba(255, 252, 240, 0.98)",
+  [ITEM_TYPES.BAD]: "rgba(255, 216, 221, 0.95)",
+};
+
+const GLOW = {
+  [ITEM_TYPES.GOOD]: "rgba(255, 213, 79, 0.75)",
+  [ITEM_TYPES.BONUS]: "rgba(255, 229, 150, 1)",
+  [ITEM_TYPES.BAD]: "rgba(224, 92, 110, 0.8)",
 };
 
 const FLOAT_COLOR = {
@@ -431,23 +444,24 @@ function draw(ctx, state, now) {
     ctx.translate(it.x, it.y);
     ctx.rotate(it.rot);
 
-    // 이모지 폰트가 달라도 좋음/나쁨을 구분할 수 있도록 링으로 표시
     const pulse = def.type === ITEM_TYPES.BONUS ? 1 + Math.sin(now / 160) * 0.08 : 1;
+    const r = def.radius * pulse;
+
+    // 밝은 원판 + 번짐: 어두운 밤하늘 위에서도 이모지가 또렷하게 보이도록
+    ctx.shadowColor = GLOW[def.type];
+    ctx.shadowBlur = def.type === ITEM_TYPES.BONUS ? 26 : 16;
     ctx.beginPath();
-    ctx.arc(0, 0, def.radius * pulse, 0, Math.PI * 2);
-    ctx.fillStyle =
-      def.type === ITEM_TYPES.BAD ? "rgba(224,92,110,0.16)" : "rgba(255,213,79,0.14)";
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = DISC[def.type];
     ctx.fill();
-    ctx.lineWidth = def.type === ITEM_TYPES.BONUS ? 3 : 2;
+    ctx.shadowBlur = 0;
+
+    // 이모지 폰트가 기기마다 달라도 좋음/나쁨을 구분할 수 있도록 링 색으로 표시
+    ctx.lineWidth = def.type === ITEM_TYPES.BONUS ? 4 : 3;
     ctx.strokeStyle = RING[def.type];
     ctx.stroke();
 
-    if (def.type === ITEM_TYPES.BONUS) {
-      ctx.shadowColor = "rgba(255,229,150,0.9)";
-      ctx.shadowBlur = 18;
-    }
-
-    ctx.font = Math.round(def.radius * 1.25) + "px " + EMOJI_FONT;
+    ctx.font = Math.round(def.radius * 1.5) + "px " + EMOJI_FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(def.emoji, 0, 1);

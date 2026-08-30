@@ -8,13 +8,13 @@ export const ITEM_TYPES = {
 
 /** 아이템 정의 (emoji 는 폰트에 따라 달라지므로 색 링으로 좋음/나쁨을 구분합니다) */
 export const ITEMS = [
-  { key: "songpyeon", label: "송편 반죽", emoji: "🥟", type: ITEM_TYPES.GOOD, points: 100, radius: 30, weight: 22 },
-  { key: "rice",      label: "쌀가루",   emoji: "🍚", type: ITEM_TYPES.GOOD, points: 100, radius: 30, weight: 20 },
-  { key: "bean",      label: "팥",       emoji: "🌰", type: ITEM_TYPES.GOOD, points: 100, radius: 29, weight: 18 },
-  { key: "mugwort",   label: "쑥",       emoji: "🌿", type: ITEM_TYPES.GOOD, points: 100, radius: 29, weight: 16 },
-  { key: "moon",      label: "황금 보름달", emoji: "🌕", type: ITEM_TYPES.BONUS, points: 300, radius: 34, weight: 6 },
-  { key: "burnt",     label: "탄 송편",  emoji: "🔥", type: ITEM_TYPES.BAD,  points: -150, radius: 30, weight: 10 },
-  { key: "rotten",    label: "상한 재료", emoji: "🥀", type: ITEM_TYPES.BAD,  points: -150, radius: 30, weight: 8 },
+  { key: "songpyeon", label: "송편 반죽", emoji: "🥟", type: ITEM_TYPES.GOOD, points: 100, radius: 36, weight: 22 },
+  { key: "rice",      label: "쌀가루",   emoji: "🍚", type: ITEM_TYPES.GOOD, points: 100, radius: 36, weight: 20 },
+  { key: "bean",      label: "팥",       emoji: "🌰", type: ITEM_TYPES.GOOD, points: 100, radius: 35, weight: 18 },
+  { key: "mugwort",   label: "쑥",       emoji: "🌿", type: ITEM_TYPES.GOOD, points: 100, radius: 35, weight: 16 },
+  { key: "moon",      label: "황금 보름달", emoji: "🌕", type: ITEM_TYPES.BONUS, points: 300, radius: 42, weight: 6 },
+  { key: "burnt",     label: "탄 송편",  emoji: "🔥", type: ITEM_TYPES.BAD,  points: -150, radius: 36, weight: 10 },
+  { key: "rotten",    label: "상한 재료", emoji: "🥀", type: ITEM_TYPES.BAD,  points: -150, radius: 36, weight: 8 },
 ];
 
 const TOTAL_WEIGHT = ITEMS.reduce((sum, it) => sum + it.weight, 0);
