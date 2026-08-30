@@ -45,7 +45,7 @@ export default function NightSky({ withMoon = true }) {
       {withMoon && (
         <>
           {/* 보름달 — 언덕 위에 온전한 원으로 떠 있습니다 */}
-          <div className="absolute bottom-[26%] left-[60%] h-20 w-20">
+          <div className="absolute bottom-[20%] left-[62%] h-20 w-20 opacity-90">
             {/* 달무리 */}
             <div className="animate-shine absolute -inset-8 rounded-full bg-moon-500/20 blur-2xl" />
             <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_30%,#fffdf3,#ffe9a8_45%,#f5c542_100%)]" />

@@ -57,7 +57,7 @@ export default function RankingBoard({ rows = [], myRank = null, myName = null, 
   const inTopN = Boolean(myKey) && rows.some((r) => r.player_name.trim().toLowerCase() === myKey);
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/5 p-3.5 backdrop-blur-sm">
+    <section className="rounded-2xl border border-white/10 bg-night-800/90 p-3.5 shadow-lg shadow-night-900/40 backdrop-blur-md">
       <header className="mb-3 flex items-baseline justify-between px-1">
         <h2 className="text-base font-bold text-moon-100">🏆 명예의 전당</h2>
         <span className="text-[11px] text-white/40">TOP {TOP_N}</span>

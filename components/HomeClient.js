@@ -63,7 +63,7 @@ export default function HomeClient({ initialRows, initialError }) {
 
         {/* 등록된 이름이 있을 때만 내 기록 카드 노출 */}
         {ready && name && (
-          <div className="flex animate-pop-in items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 backdrop-blur-sm">
+          <div className="flex animate-pop-in items-center justify-between rounded-2xl border border-white/10 bg-night-800/90 px-4 py-3.5 shadow-lg shadow-night-900/40 backdrop-blur-md">
             <div className="min-w-0">
               <p className="text-[11px] text-white/45">참가자</p>
               <p className="truncate text-base font-bold text-moon-100">{name}</p>
@@ -92,7 +92,7 @@ export default function HomeClient({ initialRows, initialError }) {
           <button
             type="button"
             onClick={() => setInfoOpen(true)}
-            className="flex w-full items-center justify-between gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-moon-100 backdrop-blur-sm transition active:scale-[0.98]"
+            className="flex w-full items-center justify-between gap-2 rounded-2xl border border-white/15 bg-night-800/90 px-4 py-3 text-sm font-bold text-moon-100 shadow-lg shadow-night-900/40 backdrop-blur-md transition active:scale-[0.98]"
           >
             <span>📖 게임 방법 · 아이템 소개</span>
             <span className="animate-shine shrink-0 rounded-full bg-moon-500/20 px-2.5 py-1 text-[10px] font-black tracking-[0.15em] text-moon-300 ring-1 ring-moon-500/40">
