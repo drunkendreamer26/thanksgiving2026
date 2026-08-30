@@ -5,6 +5,9 @@ import {
   ITEM_TYPES,
   HIT_SLOP,
   STUN_MS,
+  BAD_ITEMS,
+  ESCORT_COUNT,
+  IMAGE_SOURCES,
   pickItem,
   multiplierFor,
   spawnIntervalAt,
@@ -19,26 +22,42 @@ const EMOJI_FONT =
 const RING = {
   [ITEM_TYPES.GOOD]: "#f5a623",
   [ITEM_TYPES.BONUS]: "#fff8e1",
+  [ITEM_TYPES.SPECIAL]: "#7ef0d0",
   [ITEM_TYPES.BAD]: "#e05c6e",
 };
 
 const DISC = {
   [ITEM_TYPES.GOOD]: "rgba(255, 248, 231, 0.95)",
   [ITEM_TYPES.BONUS]: "rgba(255, 252, 240, 0.98)",
+  [ITEM_TYPES.SPECIAL]: "rgba(226, 255, 246, 0.98)",
   [ITEM_TYPES.BAD]: "rgba(255, 216, 221, 0.95)",
 };
 
 const GLOW = {
   [ITEM_TYPES.GOOD]: "rgba(255, 213, 79, 0.75)",
   [ITEM_TYPES.BONUS]: "rgba(255, 229, 150, 1)",
+  [ITEM_TYPES.SPECIAL]: "rgba(126, 240, 208, 1)",
   [ITEM_TYPES.BAD]: "rgba(224, 92, 110, 0.8)",
 };
 
 const FLOAT_COLOR = {
   [ITEM_TYPES.GOOD]: "#ffe9a8",
   [ITEM_TYPES.BONUS]: "#fff8e1",
+  [ITEM_TYPES.SPECIAL]: "#7ef0d0",
   [ITEM_TYPES.BAD]: "#ff8b9c",
 };
+
+/** 아이템 이미지 캐시 (모듈 단위로 한 번만 로드) */
+const IMAGE_CACHE = {};
+function getImage(src) {
+  if (typeof window === "undefined" || !src) return null;
+  if (!IMAGE_CACHE[src]) {
+    const img = new window.Image();
+    img.src = src;
+    IMAGE_CACHE[src] = img;
+  }
+  return IMAGE_CACHE[src];
+}
 
 let seq = 0;
 const nextId = () => ++seq;
@@ -107,6 +126,13 @@ export default function GameCanvas({ onGameOver }) {
   }, []);
 
   /* ---------------------------------------------------------------- */
+  /* 아이템 이미지 미리 로드 (첫 등장 때 깜빡이지 않도록)                 */
+  /* ---------------------------------------------------------------- */
+  useEffect(() => {
+    IMAGE_SOURCES.forEach(getImage);
+  }, []);
+
+  /* ---------------------------------------------------------------- */
   /* 시작 카운트다운 (3 → 2 → 1 → 시작!)                                */
   /* ---------------------------------------------------------------- */
   useEffect(() => {
@@ -156,21 +182,45 @@ export default function GameCanvas({ onGameOver }) {
 
     let hudAccum = 0;
 
+    const push = (def, x, y, vy, spin = true) => {
+      const margin = def.radius + 6;
+      state.items.push({
+        id: nextId(),
+        def,
+        x: Math.min(Math.max(x, margin), Math.max(margin, state.w - margin)),
+        y,
+        vx: spin ? (Math.random() - 0.5) * 26 : 0,
+        vy,
+        // 이미지 아이템(얼굴)은 돌아가면 어색하므로 회전시키지 않습니다
+        rot: spin ? (Math.random() - 0.5) * 0.6 : 0,
+        vr: spin ? (Math.random() - 0.5) * 1.6 : 0,
+      });
+    };
+
     const spawn = (progress) => {
       const def = pickItem();
       const margin = def.radius + 10;
       const x = margin + Math.random() * Math.max(1, state.w - margin * 2);
       const baseSpeed = state.h / 3.1;
-      state.items.push({
-        id: nextId(),
-        def,
-        x,
-        y: -def.radius - 8,
-        vx: (Math.random() - 0.5) * 26,
-        vy: baseSpeed * fallSpeedAt(progress) * (0.85 + Math.random() * 0.35),
-        rot: (Math.random() - 0.5) * 0.6,
-        vr: (Math.random() - 0.5) * 1.6,
-      });
+      const vy = baseSpeed * fallSpeedAt(progress) * (0.85 + Math.random() * 0.35);
+      const isSpecial = def.type === ITEM_TYPES.SPECIAL;
+
+      push(def, x, -def.radius - 8, vy, !isSpecial);
+
+      // 스페셜 재료는 방해 아이템(탄 송편·상한 재료)을 양옆에 달고 내려옵니다
+      if (isSpecial) {
+        for (let i = 0; i < ESCORT_COUNT; i++) {
+          const bad = BAD_ITEMS[i % BAD_ITEMS.length];
+          const side = i % 2 === 0 ? -1 : 1;
+          const gap = def.radius + bad.radius + 16;
+          push(
+            bad,
+            x + side * gap,
+            -def.radius - 8 + (Math.random() - 0.5) * 26,
+            vy
+          );
+        }
+      }
     };
 
     const step = (now) => {
@@ -305,7 +355,16 @@ export default function GameCanvas({ onGameOver }) {
       const gain = def.points * multiplierFor(state.combo);
       state.score += gain;
       pushFloat(state, hit.x, hit.y, "+" + gain, def.type);
-      pushBurst(state, hit.x, hit.y, def.type === ITEM_TYPES.BONUS ? "#fff8e1" : "#ffd54f");
+      pushBurst(
+        state,
+        hit.x,
+        hit.y,
+        def.type === ITEM_TYPES.SPECIAL
+          ? "#7ef0d0"
+          : def.type === ITEM_TYPES.BONUS
+            ? "#fff8e1"
+            : "#ffd54f"
+      );
     }
 
     setHud({
@@ -444,27 +503,45 @@ function draw(ctx, state, now) {
     ctx.translate(it.x, it.y);
     ctx.rotate(it.rot);
 
-    const pulse = def.type === ITEM_TYPES.BONUS ? 1 + Math.sin(now / 160) * 0.08 : 1;
+    const pulsing = def.type === ITEM_TYPES.BONUS || def.type === ITEM_TYPES.SPECIAL;
+    const pulse = pulsing ? 1 + Math.sin(now / 160) * 0.08 : 1;
     const r = def.radius * pulse;
 
     // 밝은 원판 + 번짐: 어두운 밤하늘 위에서도 이모지가 또렷하게 보이도록
     ctx.shadowColor = GLOW[def.type];
-    ctx.shadowBlur = def.type === ITEM_TYPES.BONUS ? 26 : 16;
+    ctx.shadowBlur = pulsing ? 26 : 16;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fillStyle = DISC[def.type];
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // 이모지 폰트가 기기마다 달라도 좋음/나쁨을 구분할 수 있도록 링 색으로 표시
-    ctx.lineWidth = def.type === ITEM_TYPES.BONUS ? 4 : 3;
+    const img = def.image ? getImage(def.image) : null;
+    const imgReady = img && img.complete && img.naturalWidth > 0;
+
+    if (imgReady) {
+      // 사진은 원형으로 잘라서 채웁니다
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, -(r - 2), -(r - 2), (r - 2) * 2, (r - 2) * 2);
+      ctx.restore();
+    } else {
+      ctx.font = Math.round(def.radius * 1.5) + "px " + EMOJI_FONT;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      // 이미지 로딩 전에는 대체 이모지로 그립니다
+      ctx.fillText(def.emoji ?? def.fallbackEmoji ?? "❓", 0, 1);
+    }
+
+    // 이모지 폰트가 기기마다 달라도 종류를 구분할 수 있도록 링 색으로 표시
+    ctx.lineWidth = pulsing ? 4 : 3;
     ctx.strokeStyle = RING[def.type];
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.font = Math.round(def.radius * 1.5) + "px " + EMOJI_FONT;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(def.emoji, 0, 1);
     ctx.restore();
   }
 

@@ -96,6 +96,10 @@ export default function HomeClient({ initialRows, initialError }) {
               <b className="text-moon-500">+300점</b>
             </li>
             <li>
+              · 아주 드물게 나오는 <b className="text-[#7ef0d0]">스페셜 재료 +500점</b> — 단,
+              방해 아이템을 양옆에 달고 내려옵니다.
+            </li>
+            <li>
               · 탄 송편·상한 재료를 만지면 <b className="text-hanbok">-150점</b> 이고 잠시
               경직됩니다.
             </li>
