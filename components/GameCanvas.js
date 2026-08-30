@@ -12,13 +12,14 @@ import {
   multiplierFor,
   spawnIntervalAt,
   fallSpeedAt,
+  burstChanceAt,
 } from "@/components/gameConfig";
-import { GAME_DURATION } from "@/lib/constants";
+import { LEVEL_DURATION, MAX_MISS } from "@/lib/constants";
 
 const EMOJI_FONT =
   '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
 
-// 링 = 테두리, DISC = 이모지 뒤에 까는 밝은 원판, GLOW = 밤하늘에서 떠 보이게 하는 번짐
+// RING = 테두리, DISC = 이모지 뒤에 까는 밝은 원판, GLOW = 밤하늘에서 떠 보이게 하는 번짐
 const RING = {
   [ITEM_TYPES.GOOD]: "#f5a623",
   [ITEM_TYPES.BONUS]: "#fff8e1",
@@ -62,10 +63,14 @@ function getImage(src) {
 let seq = 0;
 const nextId = () => ++seq;
 
+const levelFor = (elapsed) => Math.floor(elapsed / LEVEL_DURATION) + 1;
+
 /**
- * 캔버스 기반 클리커 게임.
+ * 캔버스 기반 클리커 게임 (무제한 · 레벨제).
+ * - 시간 제한 없음. LEVEL_DURATION 초마다 레벨이 오르고 점점 빨라집니다.
+ * - 감점 없는 재료를 MAX_MISS 개 놓치면 종료.
  * - 아이템 낙하/충돌/이펙트는 모두 canvas 에서 처리(모바일 성능 확보)
- * - HUD(시간·점수)는 DOM 으로 렌더해 텍스트 선명도를 유지
+ * - HUD 는 DOM 으로 렌더해 텍스트 선명도를 유지
  */
 export default function GameCanvas({ onGameOver }) {
   const wrapRef = useRef(null);
@@ -74,12 +79,15 @@ export default function GameCanvas({ onGameOver }) {
   // 렌더 트리거용 상태 (프레임마다 바뀌지 않도록 최소화)
   const [hud, setHud] = useState({
     score: 0,
-    timeLeft: GAME_DURATION,
+    level: 1,
+    levelProgress: 0,
+    misses: 0,
     combo: 0,
     stunned: false,
   });
   const [countdown, setCountdown] = useState(3);
   const [phase, setPhase] = useState("ready"); // ready | playing | done
+  const [banner, setBanner] = useState(0);
 
   // 가변 게임 상태는 전부 ref 로 관리 (프레임마다 setState 하지 않음)
   const g = useRef({
@@ -90,10 +98,13 @@ export default function GameCanvas({ onGameOver }) {
     bursts: [],
     score: 0,
     combo: 0,
+    misses: 0,
+    level: 1,
     elapsed: 0,
     spawnTimer: 0,
     stunUntil: 0,
     shake: 0,
+    missFlash: 0,
     running: false,
     last: 0,
     raf: 0,
@@ -146,6 +157,16 @@ export default function GameCanvas({ onGameOver }) {
   }, [phase, countdown]);
 
   /* ---------------------------------------------------------------- */
+  /* 레벨업 배너                                                        */
+  /* ---------------------------------------------------------------- */
+  useEffect(() => {
+    if (hud.level <= 1) return;
+    setBanner(hud.level);
+    const t = setTimeout(() => setBanner(0), 1200);
+    return () => clearTimeout(t);
+  }, [hud.level]);
+
+  /* ---------------------------------------------------------------- */
   /* 메인 루프                                                          */
   /* ---------------------------------------------------------------- */
   const endGame = useCallback(() => {
@@ -154,7 +175,7 @@ export default function GameCanvas({ onGameOver }) {
     state.running = false;
     cancelAnimationFrame(state.raf);
     setPhase("done");
-    onGameOver(state.score);
+    onGameOver(state.score, state.level);
   }, [onGameOver]);
 
   useEffect(() => {
@@ -171,16 +192,28 @@ export default function GameCanvas({ onGameOver }) {
       bursts: [],
       score: 0,
       combo: 0,
+      misses: 0,
+      level: 1,
       elapsed: 0,
       spawnTimer: 0,
       stunUntil: 0,
       shake: 0,
+      missFlash: 0,
       running: true,
       last: performance.now(),
     });
-    setHud({ score: 0, timeLeft: GAME_DURATION, combo: 0, stunned: false });
+    setHud({ score: 0, level: 1, levelProgress: 0, misses: 0, combo: 0, stunned: false });
 
     let hudAccum = 0;
+
+    const syncHud = (state, now) => ({
+      score: state.score,
+      level: state.level,
+      levelProgress: (state.elapsed % LEVEL_DURATION) / LEVEL_DURATION,
+      misses: state.misses,
+      combo: state.combo,
+      stunned: now < state.stunUntil,
+    });
 
     const push = (def, x, y, vy, spin = true) => {
       const margin = def.radius + 6;
@@ -197,12 +230,12 @@ export default function GameCanvas({ onGameOver }) {
       });
     };
 
-    const spawn = (progress) => {
+    const spawnOne = (level) => {
       const def = pickItem();
       const margin = def.radius + 10;
       const x = margin + Math.random() * Math.max(1, state.w - margin * 2);
       const baseSpeed = state.h / 3.1;
-      const vy = baseSpeed * fallSpeedAt(progress) * (0.85 + Math.random() * 0.35);
+      const vy = baseSpeed * fallSpeedAt(level) * (0.85 + Math.random() * 0.35);
       const isSpecial = def.type === ITEM_TYPES.SPECIAL;
 
       push(def, x, -def.radius - 8, vy, !isSpecial);
@@ -213,12 +246,7 @@ export default function GameCanvas({ onGameOver }) {
           const bad = BAD_ITEMS[i % BAD_ITEMS.length];
           const side = i % 2 === 0 ? -1 : 1;
           const gap = def.radius + bad.radius + 16;
-          push(
-            bad,
-            x + side * gap,
-            -def.radius - 8 + (Math.random() - 0.5) * 26,
-            vy
-          );
+          push(bad, x + side * gap, -def.radius - 8 + (Math.random() - 0.5) * 26, vy);
         }
       }
     };
@@ -230,18 +258,15 @@ export default function GameCanvas({ onGameOver }) {
       const dt = Math.min((now - state.last) / 1000, 0.1);
       state.last = now;
       state.elapsed += dt;
-
-      const timeLeft = Math.max(0, GAME_DURATION - state.elapsed);
-      const progress = Math.min(state.elapsed / GAME_DURATION, 1);
+      state.level = levelFor(state.elapsed);
 
       /* --- 생성 -------------------------------------------------- */
-      if (timeLeft > 0.4) {
-        state.spawnTimer -= dt * 1000;
-        if (state.spawnTimer <= 0) {
-          spawn(progress);
-          state.spawnTimer =
-            spawnIntervalAt(progress) * (0.8 + Math.random() * 0.4);
-        }
+      state.spawnTimer -= dt * 1000;
+      if (state.spawnTimer <= 0) {
+        spawnOne(state.level);
+        // 레벨이 높아지면 가끔 두 개가 동시에 쏟아집니다
+        if (Math.random() < burstChanceAt(state.level)) spawnOne(state.level);
+        state.spawnTimer = spawnIntervalAt(state.level) * (0.8 + Math.random() * 0.4);
       }
 
       /* --- 이동 -------------------------------------------------- */
@@ -259,8 +284,18 @@ export default function GameCanvas({ onGameOver }) {
           it.vx *= -1;
         }
       }
-      // 바닥에 닿으면 자동 소멸
-      state.items = state.items.filter((it) => it.y - it.def.radius < state.h);
+
+      /* --- 바닥 통과 판정 ----------------------------------------- */
+      // 감점 없는 재료(좋은 재료·보름달·스페셜)를 놓치면 기회가 줄어듭니다.
+      state.items = state.items.filter((it) => {
+        if (it.y - it.def.radius < state.h) return true;
+        if (it.def.type !== ITEM_TYPES.BAD) {
+          state.misses += 1;
+          state.combo = 0;
+          state.missFlash = 0.45;
+        }
+        return false;
+      });
 
       /* --- 이펙트 수명 ------------------------------------------- */
       for (const f of state.floats) {
@@ -280,26 +315,23 @@ export default function GameCanvas({ onGameOver }) {
       state.bursts = state.bursts.filter((b) => b.life > 0);
 
       if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 34);
+      if (state.missFlash > 0) state.missFlash = Math.max(0, state.missFlash - dt);
 
       /* --- 그리기 ------------------------------------------------ */
       draw(ctx, state, now);
+
+      /* --- 종료 판정 --------------------------------------------- */
+      if (state.misses >= MAX_MISS) {
+        setHud(syncHud(state, now));
+        endGame();
+        return;
+      }
 
       /* --- HUD 는 0.1초마다만 갱신 -------------------------------- */
       hudAccum += dt;
       if (hudAccum >= 0.1) {
         hudAccum = 0;
-        setHud({
-          score: state.score,
-          timeLeft,
-          combo: state.combo,
-          stunned: now < state.stunUntil,
-        });
-      }
-
-      if (timeLeft <= 0) {
-        setHud({ score: state.score, timeLeft: 0, combo: state.combo, stunned: false });
-        endGame();
-        return;
+        setHud(syncHud(state, now));
       }
 
       state.raf = requestAnimationFrame(step);
@@ -369,16 +401,18 @@ export default function GameCanvas({ onGameOver }) {
 
     setHud({
       score: state.score,
-      timeLeft: Math.max(0, GAME_DURATION - state.elapsed),
+      level: state.level,
+      levelProgress: (state.elapsed % LEVEL_DURATION) / LEVEL_DURATION,
+      misses: state.misses,
       combo: state.combo,
       stunned: now < state.stunUntil,
     });
   }, []);
 
   /* ---------------------------------------------------------------- */
-  const timePct = Math.max(0, Math.min(1, hud.timeLeft / GAME_DURATION));
-  const urgent = hud.timeLeft <= 5;
   const multiplier = multiplierFor(hud.combo);
+  const left = Math.max(0, MAX_MISS - hud.misses);
+  const danger = left <= 3;
 
   return (
     <div className="no-touch-callout relative flex h-dvh w-full flex-col overflow-hidden bg-gradient-to-b from-[#0a0a1f] via-[#241d4f] to-[#4a2f5c]">
@@ -392,31 +426,46 @@ export default function GameCanvas({ onGameOver }) {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-semibold tracking-[0.2em] text-white/45">TIME</p>
-            <p
-              className={[
-                "text-3xl font-black leading-none tabular-nums transition-colors",
-                urgent ? "text-hanbok" : "text-moon-300",
-              ].join(" ")}
-            >
-              {hud.timeLeft.toFixed(1)}
+            <p className="text-[10px] font-semibold tracking-[0.2em] text-white/45">LEVEL</p>
+            <p className="text-3xl font-black leading-none tabular-nums text-moon-300">
+              {hud.level}
             </p>
           </div>
         </div>
 
-        {/* 남은 시간 게이지 */}
+        {/* 다음 레벨까지의 진행도 */}
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
           <div
-            className={[
-              "h-full rounded-full transition-[width] duration-100 ease-linear",
-              urgent ? "bg-hanbok" : "bg-gradient-to-r from-moon-300 to-moon-700",
-            ].join(" ")}
-            style={{ width: timePct * 100 + "%" }}
+            className="h-full rounded-full bg-gradient-to-r from-moon-300 to-moon-700 transition-[width] duration-100 ease-linear"
+            style={{ width: hud.levelProgress * 100 + "%" }}
           />
         </div>
 
+        {/* 남은 기회 */}
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            {Array.from({ length: MAX_MISS }, (_, i) => (
+              <span
+                key={i}
+                className={[
+                  "h-1.5 w-1.5 rounded-full transition-colors",
+                  i < left ? (danger ? "bg-hanbok" : "bg-moon-300") : "bg-white/15",
+                ].join(" ")}
+              />
+            ))}
+          </div>
+          <p
+            className={[
+              "text-[11px] font-bold tabular-nums",
+              danger ? "text-hanbok" : "text-white/45",
+            ].join(" ")}
+          >
+            놓침 {hud.misses}/{MAX_MISS}
+          </p>
+        </div>
+
         {/* 콤보 */}
-        <div className="mt-2 flex h-6 items-center justify-center">
+        <div className="mt-1.5 flex h-6 items-center justify-center">
           {multiplier > 1 && (
             <span
               key={multiplier}
@@ -446,10 +495,24 @@ export default function GameCanvas({ onGameOver }) {
           </div>
         )}
 
+        {/* 레벨업 배너 */}
+        {banner > 0 && (
+          <div className="pointer-events-none absolute inset-x-0 top-1/3 z-20 flex justify-center">
+            <span className="animate-pop-in rounded-2xl bg-moon-500/90 px-5 py-2.5 text-lg font-black text-night-900 shadow-lg">
+              LEVEL {banner} ⚡
+            </span>
+          </div>
+        )}
+
         {/* 시작 카운트다운 */}
         {phase === "ready" && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-night-900/75 backdrop-blur-[2px]">
-            <p className="mb-3 text-sm text-white/70">떨어지는 재료를 터치하세요!</p>
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-night-900/75 px-8 text-center backdrop-blur-[2px]">
+            <p className="mb-1 text-sm text-white/70">떨어지는 재료를 터치하세요!</p>
+            <p className="mb-3 text-xs leading-relaxed text-white/45">
+              시간 제한 없음 · {LEVEL_DURATION}초마다 레벨업
+              <br />
+              감점 없는 재료를 {MAX_MISS}개 놓치면 끝!
+            </p>
             <p key={countdown} className="animate-pop-in text-7xl font-black text-moon-300">
               {countdown > 0 ? countdown : "시작!"}
             </p>
@@ -528,9 +591,9 @@ function draw(ctx, state, now) {
     const pulsing = def.type === ITEM_TYPES.BONUS || def.type === ITEM_TYPES.SPECIAL;
     const pulse = pulsing ? 1 + Math.sin(now / 160) * 0.08 : 1;
     const r = def.radius * pulse;
+    const isSpecial = def.type === ITEM_TYPES.SPECIAL;
 
     // 밝은 원판 + 번짐: 어두운 밤하늘 위에서도 이모지가 또렷하게 보이도록
-    const isSpecial = def.type === ITEM_TYPES.SPECIAL;
     ctx.shadowColor = GLOW[def.type];
     ctx.shadowBlur = isSpecial
       ? 24 + 16 * (0.5 + 0.5 * Math.sin(now / 170))
@@ -573,7 +636,6 @@ function draw(ctx, state, now) {
     if (isSpecial) {
       const t = now / 1000;
 
-      // 원판 위를 사선으로 쓸고 지나가는 하이라이트
       ctx.save();
       ctx.beginPath();
       ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
@@ -591,13 +653,7 @@ function draw(ctx, state, now) {
         const a = t * 1.5 + ((Math.PI * 2) / SPARKLE_COUNT) * i;
         const twinkle = 0.45 + 0.55 * Math.sin(t * 5.5 + i * 1.9);
         if (twinkle <= 0.05) continue;
-        drawSparkle(
-          ctx,
-          Math.cos(a) * (r + 9),
-          Math.sin(a) * (r + 9),
-          8 * twinkle,
-          twinkle
-        );
+        drawSparkle(ctx, Math.cos(a) * (r + 9), Math.sin(a) * (r + 9), 8 * twinkle, twinkle);
       }
     }
 
@@ -633,4 +689,14 @@ function draw(ctx, state, now) {
   }
 
   ctx.restore();
+
+  // 재료를 놓쳤을 때 바닥이 붉게 번쩍입니다
+  if (state.missFlash > 0) {
+    const a = state.missFlash / 0.45;
+    const grad = ctx.createLinearGradient(0, h - 90, 0, h);
+    grad.addColorStop(0, "rgba(224,92,110,0)");
+    grad.addColorStop(1, "rgba(224,92,110," + 0.55 * a + ")");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, h - 90, w, 90);
+  }
 }

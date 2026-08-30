@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NightSky from "@/components/NightSky";
 import RankingBoard from "@/components/RankingBoard";
+import InfoModal from "@/components/InfoModal";
 import { usePlayerName } from "@/components/usePlayerName";
 import { getMyRank, getTopScores } from "@/app/actions";
-import { EVENT_TITLE, GAME_TITLE, GAME_DURATION, formatScore } from "@/lib/constants";
+import { EVENT_TITLE, GAME_TITLE, formatScore } from "@/lib/constants";
 
 export default function HomeClient({ initialRows, initialError }) {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function HomeClient({ initialRows, initialError }) {
   const [rows, setRows] = useState(initialRows);
   const [error, setError] = useState(initialError);
   const [myRank, setMyRank] = useState(null);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const refresh = useCallback(async (playerName) => {
     const [top, mine] = await Promise.all([
@@ -40,16 +42,21 @@ export default function HomeClient({ initialRows, initialError }) {
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
       <NightSky />
 
-      <div className="relative flex flex-1 flex-col gap-4 px-4 pb-8 pt-10">
+      <div className="relative flex flex-1 flex-col gap-3.5 px-4 pb-8 pt-10">
         {/* 타이틀 */}
         <header className="text-center">
           <p className="text-[11px] font-semibold tracking-[0.25em] text-moon-500/80">
             2026 CHUSEOK EVENT
           </p>
-          <h1 className="mt-1.5 text-[22px] font-black leading-tight text-moon-100">
+          <h1
+            className="mt-1.5 text-[22px] font-black leading-tight text-moon-100"
+            style={{
+              textShadow: "0 2px 10px rgba(10,10,31,0.9), 0 0 3px rgba(10,10,31,0.95)",
+            }}
+          >
             {EVENT_TITLE}
           </h1>
-          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-moon-500/40 bg-moon-500/10 px-3.5 py-1.5 text-sm font-bold text-moon-300">
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-moon-500/40 bg-moon-500/10 px-3.5 py-1.5 text-sm font-bold text-moon-300 backdrop-blur-sm">
             🌕 {GAME_TITLE}
           </p>
         </header>
@@ -80,40 +87,19 @@ export default function HomeClient({ initialRows, initialError }) {
           </div>
         )}
 
-        {/* 랭킹보드 */}
-        <RankingBoard rows={rows} myRank={myRank} myName={name} error={error} />
+        {/* 게임 방법 → 게임 시작 순서 (명예의 전당 위) */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            className="flex w-full items-center justify-between gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-moon-100 backdrop-blur-sm transition active:scale-[0.98]"
+          >
+            <span>📖 게임 방법 · 아이템 소개</span>
+            <span className="animate-shine shrink-0 rounded-full bg-moon-500/20 px-2.5 py-1 text-[10px] font-black tracking-[0.15em] text-moon-300 ring-1 ring-moon-500/40">
+              CLICK
+            </span>
+          </button>
 
-        {/* 게임 방법 */}
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[12px] leading-relaxed text-white/60 backdrop-blur-sm">
-          <p className="mb-2 text-sm font-bold text-moon-100">🎮 게임 방법</p>
-          <ul className="space-y-1">
-            <li>
-              · {GAME_DURATION}초 동안 떨어지는 송편 재료를{" "}
-              <b className="text-moon-300">터치</b>하세요.
-            </li>
-            <li>
-              · 쌀가루·팥·쑥 <b className="text-mugwort">+100점</b> / 황금 보름달{" "}
-              <b className="text-moon-500">+300점</b>
-            </li>
-            <li>
-              · 아주 드물게 나오는 <b className="text-[#7ef0d0]">스페셜 재료 +500점</b> — 단,
-              방해 아이템을 양옆에 달고 내려옵니다.
-            </li>
-            <li>
-              · 탄 송편·상한 재료를 만지면 <b className="text-hanbok">-150점</b> 이고 잠시
-              경직됩니다.
-            </li>
-            <li>
-              · 연속으로 모으면 <b className="text-moon-300">콤보 배수</b>가 올라갑니다.
-            </li>
-            <li>· 게임이 끝나면 이름을 입력해 점수를 등록합니다.</li>
-          </ul>
-        </section>
-
-        <div className="flex-1" />
-
-        {/* 게임 시작 */}
-        <div className="sticky bottom-4">
           <button
             type="button"
             onClick={() => router.push("/game")}
@@ -122,7 +108,12 @@ export default function HomeClient({ initialRows, initialError }) {
             게임 시작하기
           </button>
         </div>
+
+        {/* 랭킹보드 */}
+        <RankingBoard rows={rows} myRank={myRank} myName={name} error={error} />
       </div>
+
+      <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
     </main>
   );
 }

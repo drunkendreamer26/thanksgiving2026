@@ -10,14 +10,14 @@ export default function GamePage() {
   const router = useRouter();
   const { name, remember } = usePlayerName();
 
-  const [finalScore, setFinalScore] = useState(null);
+  const [result, setResult] = useState(null); // { score, level }
   // key 를 바꿔 GameCanvas 를 통째로 리셋 → "다시 하기"
   const [round, setRound] = useState(0);
 
-  const handleGameOver = useCallback((score) => setFinalScore(score), []);
+  const handleGameOver = useCallback((score, level) => setResult({ score, level }), []);
 
   const handleRetry = useCallback(() => {
-    setFinalScore(null);
+    setResult(null);
     setRound((r) => r + 1);
   }, []);
 
@@ -30,9 +30,10 @@ export default function GamePage() {
     <main className="relative h-dvh w-full overflow-hidden">
       <GameCanvas key={round} onGameOver={handleGameOver} />
 
-      {finalScore !== null && (
+      {result && (
         <ResultModal
-          score={finalScore}
+          score={result.score}
+          level={result.level}
           savedName={name}
           onRegistered={remember}
           onRetry={handleRetry}

@@ -16,7 +16,7 @@ function grade(score) {
  * - 이름이 아직 없으면 입력받아 등록 (등록과 동시에 이 기기에 기억)
  * - 이미 등록된 이름이 있으면 그 이름으로 바로 등록
  */
-export default function ResultModal({ score, savedName, onRegistered, onRetry, onDone }) {
+export default function ResultModal({ score, level, savedName, onRegistered, onRetry, onDone }) {
   const [name, setName] = useState(savedName || "");
   const [editing, setEditing] = useState(!savedName);
   const [error, setError] = useState("");
@@ -58,11 +58,17 @@ export default function ResultModal({ score, savedName, onRegistered, onRetry, o
         <p className="text-5xl leading-none">{g.emoji}</p>
         <p className="mt-3 text-sm font-semibold text-moon-500">{g.text}</p>
 
-        <p className="mt-1 text-xs text-white/45">타임 오버! 최종 점수</p>
+        <p className="mt-1 text-xs text-white/45">게임 오버! 최종 점수</p>
         <p className="mt-1 text-5xl font-black tabular-nums text-moon-100">
           {formatScore(score)}
           <span className="ml-1 text-lg font-bold text-white/50">점</span>
         </p>
+
+        {level ? (
+          <p className="mt-2 inline-block rounded-full bg-moon-500/15 px-3 py-1 text-xs font-bold text-moon-300 ring-1 ring-moon-500/30">
+            레벨 {level} 도달
+          </p>
+        ) : null}
 
         {/* 이름 입력 / 확인 */}
         {!done && (

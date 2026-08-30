@@ -32,6 +32,11 @@ export const IMAGE_SOURCES = ITEMS.filter((it) => it.image).map((it) => it.image
 
 const TOTAL_WEIGHT = ITEMS.reduce((sum, it) => sum + it.weight, 0);
 
+/** 아이템 등장 확률(%) — weight 합계가 바뀌어도 항상 맞게 계산됩니다 */
+export function chanceOf(item) {
+  return (item.weight / TOTAL_WEIGHT) * 100;
+}
+
 export function pickItem(rand = Math.random) {
   let roll = rand() * TOTAL_WEIGHT;
   for (const item of ITEMS) {
@@ -58,12 +63,23 @@ export function multiplierFor(combo) {
   return Math.min(1 + Math.floor(combo / COMBO_STEP), MAX_MULTIPLIER);
 }
 
-/** 진행도(0~1)에 따른 생성 간격(ms) — 뒤로 갈수록 촘촘해집니다 */
-export function spawnIntervalAt(progress) {
-  return 620 - 300 * progress;
+/**
+ * 레벨에 따른 생성 간격(ms). 레벨이 오를수록 촘촘해지고 하한에서 멈춥니다.
+ * L1 700ms → L5 480ms → L10 205ms → L11+ 170ms
+ */
+export function spawnIntervalAt(level) {
+  return Math.max(170, 700 - 55 * (level - 1));
 }
 
-/** 진행도(0~1)에 따른 낙하 속도 배수 */
-export function fallSpeedAt(progress) {
-  return 1 + 0.75 * progress;
+/**
+ * 레벨에 따른 낙하 속도 배수. 상한 3.2배.
+ * L1 1.00 → L5 1.52 → L10 2.17 → L18+ 3.2
+ */
+export function fallSpeedAt(level) {
+  return Math.min(3.2, 1 + 0.13 * (level - 1));
+}
+
+/** 한 번에 여러 개가 쏟아지는 확률 (레벨이 높을수록 증가, 최대 45%) */
+export function burstChanceAt(level) {
+  return Math.min(0.45, Math.max(0, (level - 3) * 0.05));
 }

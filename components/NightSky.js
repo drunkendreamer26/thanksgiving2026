@@ -35,10 +35,11 @@ export default function NightSky({ withMoon = true }) {
         />
       ))}
 
+      {/* 제목과 겹치지 않도록 타이틀 블록 아래·오른쪽 끝에 배치 */}
       {withMoon && (
-        <div className="absolute -right-6 top-10">
-          <div className="h-28 w-28 rounded-full bg-gradient-to-br from-moon-100 to-moon-500 opacity-90 blur-[0.5px]" />
-          <div className="absolute inset-0 -z-10 h-28 w-28 rounded-full bg-moon-500 opacity-40 blur-2xl animate-shine" />
+        <div className="absolute -right-8 bottom-28">
+          <div className="h-24 w-24 rounded-full bg-gradient-to-br from-moon-100 to-moon-500 opacity-80 blur-[0.5px]" />
+          <div className="absolute inset-0 -z-10 h-24 w-24 rounded-full bg-moon-500 opacity-35 blur-2xl animate-shine" />
         </div>
       )}
 
