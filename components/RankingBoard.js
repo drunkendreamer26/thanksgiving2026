@@ -15,7 +15,7 @@ function RankBadge({ rank }) {
   );
 }
 
-function Row({ rank, userId, score, createdAt, highlight }) {
+function Row({ rank, playerName, score, createdAt, highlight }) {
   return (
     <li
       className={[
@@ -35,7 +35,7 @@ function Row({ rank, userId, score, createdAt, highlight }) {
             highlight ? "text-moon-300" : "text-moon-100",
           ].join(" ")}
         >
-          {userId}
+          {playerName}
           {highlight && (
             <span className="ml-1.5 rounded-md bg-moon-500 px-1.5 py-0.5 text-[10px] font-bold text-night-900 align-middle">
               나
@@ -54,7 +54,7 @@ function Row({ rank, userId, score, createdAt, highlight }) {
 
 export default function RankingBoard({ rows = [], myRank = null, myName = null, error = null }) {
   const myKey = myName ? myName.trim().toLowerCase() : null;
-  const inTopN = Boolean(myKey) && rows.some((r) => r.user_id.trim().toLowerCase() === myKey);
+  const inTopN = Boolean(myKey) && rows.some((r) => r.player_name.trim().toLowerCase() === myKey);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/5 p-3.5 backdrop-blur-sm">
@@ -79,12 +79,12 @@ export default function RankingBoard({ rows = [], myRank = null, myName = null, 
         <ol className="space-y-1.5">
           {rows.map((r) => (
             <Row
-              key={r.user_id}
+              key={r.player_name}
               rank={r.rank}
-              userId={r.user_id}
+              playerName={r.player_name}
               score={r.score}
               createdAt={r.created_at}
-              highlight={Boolean(myKey) && r.user_id.trim().toLowerCase() === myKey}
+              highlight={Boolean(myKey) && r.player_name.trim().toLowerCase() === myKey}
             />
           ))}
         </ol>
@@ -99,7 +99,7 @@ export default function RankingBoard({ rows = [], myRank = null, myName = null, 
           <ol>
             <Row
               rank={myRank.rank}
-              userId={myRank.user_id}
+              playerName={myRank.player_name}
               score={myRank.score}
               createdAt={myRank.created_at}
               highlight

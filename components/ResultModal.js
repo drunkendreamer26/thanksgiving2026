@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { submitScore } from "@/app/actions";
-import { formatScore, NAME_MAX, NAME_PATTERN } from "@/lib/constants";
+import { formatScore, NAME_MAX, NAME_PATTERN, normalizeName } from "@/lib/constants";
 
 function grade(score) {
   if (score >= 4000) return { emoji: "🏆", text: "달토끼 명장!" };
@@ -28,8 +28,8 @@ export default function ResultModal({ score, savedName, onRegistered, onRetry, o
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  const trimmed = name.trim().replace(/\s+/g, " ");
-  const valid = NAME_PATTERN.test(trimmed);
+  const cleaned = normalizeName(name);
+  const valid = NAME_PATTERN.test(cleaned);
   const g = grade(score);
   const done = Boolean(result);
 
@@ -38,7 +38,7 @@ export default function ResultModal({ score, savedName, onRegistered, onRetry, o
     if (!valid || pending || done) return;
     setError("");
     startTransition(async () => {
-      const res = await submitScore(trimmed, score);
+      const res = await submitScore(cleaned, score);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -76,14 +76,14 @@ export default function ResultModal({ score, savedName, onRegistered, onRetry, o
                   ref={inputRef}
                   type="text"
                   value={name}
-                  onChange={(e) => setName(e.target.value.slice(0, NAME_MAX))}
+                  onChange={(e) => setName(normalizeName(e.target.value).slice(0, NAME_MAX))}
                   maxLength={NAME_MAX}
-                  placeholder="이름을 입력하세요 (최대 12자)"
+                  placeholder="이름을 입력하세요 (공백 없이 최대 12자)"
                   autoComplete="off"
                   className="w-full rounded-xl border border-white/15 bg-night-900/70 px-4 py-3 text-center text-base text-moon-100 placeholder:text-white/35 outline-none focus:border-moon-500/70 focus:ring-2 focus:ring-moon-500/25"
                 />
                 <p className="mt-1.5 text-[11px] text-white/40">
-                  같은 이름의 최고 점수만 랭킹에 반영됩니다.
+                  공백 없이 입력해 주세요. 같은 이름의 최고 점수만 랭킹에 반영됩니다.
                 </p>
               </>
             ) : (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { normalizeName } from "@/lib/constants";
 
 const STORAGE_KEY = "chuseok2026.playerName";
 
@@ -31,7 +32,7 @@ export function usePlayerName() {
   }, []);
 
   const remember = useCallback((next) => {
-    const value = String(next ?? "").trim().replace(/\s+/g, " ");
+    const value = normalizeName(next);
     try {
       if (value) window.localStorage.setItem(STORAGE_KEY, value);
       else window.localStorage.removeItem(STORAGE_KEY);
