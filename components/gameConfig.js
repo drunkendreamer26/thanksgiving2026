@@ -64,22 +64,28 @@ export function multiplierFor(combo) {
 }
 
 /**
+ * 화면 높이를 이 값으로 나눈 값이 배속 1.0 일 때의 초당 낙하 거리입니다.
+ * 즉 배속 1.0 에서 화면을 가로지르는 데 걸리는 시간(초).
+ */
+export const BASE_FALL_SECONDS = 2.4;
+
+/**
  * 레벨에 따른 생성 간격(ms). 레벨이 오를수록 촘촘해지고 하한에서 멈춥니다.
- * L1 700ms → L5 480ms → L10 205ms → L11+ 170ms
+ * L1 560ms → L3 464 → L5 368 → L8 224 → L10+ 140
  */
 export function spawnIntervalAt(level) {
-  return Math.max(170, 700 - 55 * (level - 1));
+  return Math.max(140, 560 - 48 * (level - 1));
 }
 
 /**
- * 레벨에 따른 낙하 속도 배수. 상한 3.2배.
- * L1 1.00 → L5 1.52 → L10 2.17 → L18+ 3.2
+ * 레벨에 따른 낙하 속도 배수. 상한 3.8배.
+ * L1 1.0(2.4초) → L5 1.8(1.33초) → L8 2.4(1.0초) → L15+ 3.8(0.63초)
  */
 export function fallSpeedAt(level) {
-  return Math.min(3.2, 1 + 0.13 * (level - 1));
+  return Math.min(3.8, 1 + 0.2 * (level - 1));
 }
 
-/** 한 번에 여러 개가 쏟아지는 확률 (레벨이 높을수록 증가, 최대 45%) */
+/** 한 번에 여러 개가 쏟아지는 확률 (레벨 3부터, 최대 55%) */
 export function burstChanceAt(level) {
-  return Math.min(0.45, Math.max(0, (level - 3) * 0.05));
+  return Math.min(0.55, Math.max(0, (level - 2) * 0.07));
 }

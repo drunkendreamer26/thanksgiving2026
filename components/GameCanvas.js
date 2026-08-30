@@ -13,6 +13,7 @@ import {
   spawnIntervalAt,
   fallSpeedAt,
   burstChanceAt,
+  BASE_FALL_SECONDS,
 } from "@/components/gameConfig";
 import { LEVEL_DURATION, MAX_MISS } from "@/lib/constants";
 
@@ -234,7 +235,7 @@ export default function GameCanvas({ onGameOver }) {
       const def = pickItem();
       const margin = def.radius + 10;
       const x = margin + Math.random() * Math.max(1, state.w - margin * 2);
-      const baseSpeed = state.h / 3.1;
+      const baseSpeed = state.h / BASE_FALL_SECONDS;
       const vy = baseSpeed * fallSpeedAt(level) * (0.85 + Math.random() * 0.35);
       const isSpecial = def.type === ITEM_TYPES.SPECIAL;
 
@@ -264,8 +265,10 @@ export default function GameCanvas({ onGameOver }) {
       state.spawnTimer -= dt * 1000;
       if (state.spawnTimer <= 0) {
         spawnOne(state.level);
-        // 레벨이 높아지면 가끔 두 개가 동시에 쏟아집니다
-        if (Math.random() < burstChanceAt(state.level)) spawnOne(state.level);
+        // 레벨이 높아지면 두세 개가 한꺼번에 쏟아집니다
+        const burst = burstChanceAt(state.level);
+        if (Math.random() < burst) spawnOne(state.level);
+        if (Math.random() < burst * 0.5) spawnOne(state.level);
         state.spawnTimer = spawnIntervalAt(state.level) * (0.8 + Math.random() * 0.4);
       }
 
