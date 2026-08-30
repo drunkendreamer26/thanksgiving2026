@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night-900: #0a0a1f;
+  --color-night-800: #131235;
+  --color-night-700: #1e1b4c;
+  --color-moon-100: #fff8e1;
+  --color-moon-300: #ffe9a8;
+  --color-moon-500: #ffd54f;
+  --color-moon-700: #f5a623;
+  --color-hanbok: #e05c6e;
+  --color-mugwort: #6fbf73;
+
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Malgun Gothic", "맑은 고딕", "Noto Sans KR", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0a0a1f;
+  color: var(--color-moon-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* 모바일에서 당겨서 새로고침 / 고무줄 스크롤 방지 */
+  overscroll-behavior-y: none;
+}
+
+/* 게임 중 더블탭 확대·길게 눌러 선택 방지 */
+.no-touch-callout {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* 숫자 input 의 스피너 제거 */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+@keyframes float-up {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-28px); opacity: 0; }
+}
+@keyframes pop-in {
+  0% { transform: scale(0.86); opacity: 0; }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes shine {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+
+.animate-pop-in { animation: pop-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-shine { animation: shine 2.4s ease-in-out infinite; }
