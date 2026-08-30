@@ -145,9 +145,9 @@ function ItemsTab() {
       </ul>
 
       <p className="rounded-xl bg-moon-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-moon-300 ring-1 ring-moon-500/25">
-        ✨ <b>스페셜 재료</b>는 등장할 때 <b>탄 송편·상한 재료를 양옆에 달고</b> 내려옵니다.
+        ✨ <b>그룹장 K</b>는 등장할 때 <b>탄 송편·상한 재료를 양옆에 달고</b> 내려옵니다.
         <br />
-        콤보 배수(최대 ×{MAX_MULTIPLIER})가 곱해지므로 스페셜 재료는 최대{" "}
+        콤보 배수(최대 ×{MAX_MULTIPLIER})가 곱해지므로 그룹장 K는 최대{" "}
         <b>
           {(
             ITEMS.find((i) => i.type === ITEM_TYPES.SPECIAL).points * MAX_MULTIPLIER
