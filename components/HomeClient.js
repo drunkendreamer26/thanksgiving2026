@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NightSky from "@/components/NightSky";
+import MoonScene from "@/components/MoonScene";
 import RankingBoard from "@/components/RankingBoard";
 import InfoModal from "@/components/InfoModal";
 import { usePlayerName } from "@/components/usePlayerName";
@@ -40,7 +41,7 @@ export default function HomeClient({ initialRows, initialError }) {
 
   return (
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
-      <NightSky />
+      <NightSky withMoon={false} />
 
       <div className="relative flex flex-1 flex-col gap-3.5 px-4 pb-8 pt-10">
         {/* 타이틀 */}
@@ -60,6 +61,9 @@ export default function HomeClient({ initialRows, initialError }) {
             🌕 {GAME_TITLE}
           </p>
         </header>
+
+        {/* 달맞이 배너 — 기록 개수와 무관하게 항상 보이는 배경 */}
+        <MoonScene />
 
         {/* 등록된 이름이 있을 때만 내 기록 카드 노출 */}
         {ready && name && (
