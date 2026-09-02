@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   verifyAdmin,
   adminResetAll,
   adminDeleteByName,
   adminExport,
+  adminSetEventWindow,
+  getEventWindow,
 } from "@/app/actions";
 import { formatScore, NAME_MAX } from "@/lib/constants";
+import { fromLocalInput, toLocalInput, formatEventWindow } from "@/lib/eventWindow";
 
 const DENY_MESSAGE = "아는 사람끼리 이러지 맙시다 ^_^";
 
@@ -34,14 +36,15 @@ function formatDateTime(value) {
  * 비밀번호는 서버(PASSWORD 환경변수)에서만 확인하며,
  * 각 기능을 실행할 때마다 비밀번호를 함께 보내 서버에서 다시 검증합니다.
  */
-export default function AdminPanel({ open, onClose, onChanged }) {
-  const router = useRouter();
+export default function AdminPanel({ open, onClose, onChanged, onEventWindowChanged }) {
   const [step, setStep] = useState("auth"); // auth | denied | panel
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(null); // { tone: "ok" | "bad", text }
   const [confirmReset, setConfirmReset] = useState(false);
   const [targetName, setTargetName] = useState("");
+  const [startInput, setStartInput] = useState("");
+  const [endInput, setEndInput] = useState("");
   const [pending, startTransition] = useTransition();
   const inputRef = useRef(null);
 
@@ -58,6 +61,20 @@ export default function AdminPanel({ open, onClose, onChanged }) {
     return () => clearTimeout(t);
   }, [open]);
 
+  // 인증에 성공하면 현재 설정된 참여 시간을 입력칸에 채워 둡니다
+  useEffect(() => {
+    if (step !== "panel") return;
+    let alive = true;
+    getEventWindow().then((res) => {
+      if (!alive) return;
+      setStartInput(toLocalInput(res.startAt));
+      setEndInput(toLocalInput(res.endAt));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [step]);
+
   if (!open) return null;
 
   function handleAuth(e) {
@@ -70,9 +87,9 @@ export default function AdminPanel({ open, onClose, onChanged }) {
         setStep("panel");
         return;
       }
-      // 불일치 → 메시지를 잠깐 보여준 뒤 게임 화면으로
+      // 불일치 → 메시지를 잠깐 보여준 뒤 첫 화면으로
       setStep("denied");
-      setTimeout(() => router.push("/game"), 1600);
+      setTimeout(onClose, 1600);
     });
   }
 
@@ -111,6 +128,24 @@ export default function AdminPanel({ open, onClose, onChanged }) {
           text: `'${res.removed.player_name}' (${formatScore(res.removed.score)}점) 기록을 삭제했습니다.`,
         });
         setTargetName("");
+      }
+    );
+  }
+
+  function handleSaveWindow() {
+    run(
+      () => adminSetEventWindow(password, fromLocalInput(startInput), fromLocalInput(endInput)),
+      (res) => {
+        setStartInput(toLocalInput(res.startAt));
+        setEndInput(toLocalInput(res.endAt));
+        onEventWindowChanged?.({ startAt: res.startAt, endAt: res.endAt });
+        const period = formatEventWindow(res.startAt, res.endAt);
+        setNotice({
+          tone: "ok",
+          text: period
+            ? `참여 시간을 저장했습니다. (${period})`
+            : "참여 시간 제한을 해제했습니다. 언제든 참여할 수 있습니다.",
+        });
       }
     );
   }
@@ -154,7 +189,7 @@ export default function AdminPanel({ open, onClose, onChanged }) {
         <div className="animate-pop-in text-center">
           <p className="text-5xl">🙈</p>
           <p className="mt-4 text-base font-bold text-moon-100">{DENY_MESSAGE}</p>
-          <p className="mt-2 text-xs text-white/45">게임 화면으로 이동합니다...</p>
+          <p className="mt-2 text-xs text-white/45">첫 화면으로 이동합니다...</p>
         </div>
       </div>
     );
@@ -307,9 +342,57 @@ export default function AdminPanel({ open, onClose, onChanged }) {
             </div>
           </section>
 
-          {/* 3. 전체 순위 다운로드 */}
+          {/* 3. 게임 참여 시간 */}
           <section className="rounded-2xl bg-white/[0.05] p-4">
-            <p className="text-sm font-bold text-moon-100">3. 전체 순위 다운로드</p>
+            <p className="text-sm font-bold text-moon-100">3. 게임 참여 시간</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-white/45">
+              이 시간 밖에서 게임을 시작하면 안내 후 첫 화면으로 돌아갑니다.
+              비워 두면 그 방향으로는 제한하지 않습니다.
+            </p>
+
+            <label className="mt-3 block text-[11px] font-semibold text-moon-300">시작 일시</label>
+            <input
+              type="datetime-local"
+              value={startInput}
+              onChange={(e) => setStartInput(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-white/15 bg-night-900/70 px-3 py-2.5 text-sm text-moon-100 outline-none focus:border-moon-500/70"
+            />
+
+            <label className="mt-3 block text-[11px] font-semibold text-moon-300">종료 일시</label>
+            <input
+              type="datetime-local"
+              value={endInput}
+              min={startInput || undefined}
+              onChange={(e) => setEndInput(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-white/15 bg-night-900/70 px-3 py-2.5 text-sm text-moon-100 outline-none focus:border-moon-500/70"
+            />
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStartInput("");
+                  setEndInput("");
+                }}
+                disabled={pending || (!startInput && !endInput)}
+                className="shrink-0 rounded-xl border border-white/15 px-4 py-3 text-sm font-bold text-white/60 transition active:scale-95 disabled:opacity-40"
+              >
+                비우기
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveWindow}
+                disabled={pending}
+                className="min-w-0 flex-1 rounded-xl bg-gradient-to-r from-moon-500 to-moon-700 py-3 text-sm font-black text-night-900 transition active:scale-[0.98] disabled:opacity-45"
+              >
+                참여 시간 저장
+              </button>
+            </div>
+          </section>
+
+          {/* 4. 전체 순위 다운로드 */}
+          <section className="rounded-2xl bg-white/[0.05] p-4">
+            <p className="text-sm font-bold text-moon-100">4. 전체 순위 다운로드</p>
             <p className="mt-1 text-[11px] leading-relaxed text-white/45">
               등수 · 이름 · 점수 · 등록일시 를 CSV 로 내려받습니다.
             </p>

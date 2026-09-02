@@ -36,7 +36,28 @@ create policy "scores are public readable"
 -- anon 키에는 insert/update/delete 정책이 없으므로 쓰기가 자동 차단됩니다.
 -- (service_role 키는 RLS 를 우회하므로 서버 액션에서만 사용하세요.)
 
--- 3) 랭킹 뷰 (선택) -------------------------------------------
+-- 3) event_config 테이블 ---------------------------------------
+-- 게임 참여 가능 시간(시작/종료)을 담는 1행짜리 설정 테이블입니다.
+-- 값이 NULL 이면 그 방향으로는 제한하지 않습니다.
+create table if not exists public.event_config (
+  id         smallint    primary key default 1 check (id = 1),
+  start_at   timestamptz,
+  end_at     timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.event_config (id) values (1) on conflict (id) do nothing;
+
+-- 참여 시간은 누구나 읽을 수 있고, 변경은 service_role(관리자 액션)만 가능합니다.
+alter table public.event_config enable row level security;
+
+drop policy if exists "event config is public readable" on public.event_config;
+create policy "event config is public readable"
+  on public.event_config for select
+  to anon, authenticated
+  using (true);
+
+-- 4) 랭킹 뷰 (선택) -------------------------------------------
 create or replace view public.rankings as
 select
   row_number() over (order by score desc, created_at asc) as rank,

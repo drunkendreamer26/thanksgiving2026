@@ -8,10 +8,11 @@ import RankingBoard from "@/components/RankingBoard";
 import InfoModal from "@/components/InfoModal";
 import AdminPanel from "@/components/AdminPanel";
 import { usePlayerName } from "@/components/usePlayerName";
-import { getBoard } from "@/app/actions";
+import { getBoard, getEventWindow } from "@/app/actions";
 import { EVENT_TITLE, GAME_TITLE, formatScore } from "@/lib/constants";
+import { eventGateMessage, eventWindowState, formatEventWindow } from "@/lib/eventWindow";
 
-export default function HomeClient({ initialRows, initialError }) {
+export default function HomeClient({ initialRows, initialError, initialEventWindow }) {
   const router = useRouter();
   const { name, ready, forget } = usePlayerName();
 
@@ -20,6 +21,28 @@ export default function HomeClient({ initialRows, initialError }) {
   const [myRank, setMyRank] = useState(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [eventWindow, setEventWindow] = useState(initialEventWindow ?? null);
+  const [checking, setChecking] = useState(false);
+  const [closedMessage, setClosedMessage] = useState("");
+
+  const period = formatEventWindow(eventWindow?.startAt, eventWindow?.endAt);
+
+  // 게임 시작 직전에 참여 시간을 다시 확인합니다.
+  // (첫 화면은 5초간 캐시되므로 종료 직후 눌린 경우까지 잡으려면 최신 값이 필요합니다)
+  const handleStart = useCallback(async () => {
+    if (checking) return;
+    setChecking(true);
+    const res = await getEventWindow();
+    setChecking(false);
+    setEventWindow({ startAt: res.startAt, endAt: res.endAt });
+
+    const message = eventGateMessage(eventWindowState(res.startAt, res.endAt));
+    if (message) {
+      setClosedMessage(message); // 첫 화면에 그대로 머무르며 안내만 보여줍니다
+      return;
+    }
+    router.push("/game");
+  }, [checking, router]);
 
   const refresh = useCallback(async (playerName) => {
     const board = await getBoard(playerName);
@@ -71,6 +94,12 @@ export default function HomeClient({ initialRows, initialError }) {
           >
             🌕 {GAME_TITLE}
           </button>
+
+          {ready && period && (
+            <p className="mt-2 text-[11px] font-semibold text-moon-500/80">
+              참여 기간 · {period}
+            </p>
+          )}
         </header>
 
         {/* 달맞이 배너 — 기록 개수와 무관하게 항상 보이는 배경 */}
@@ -93,7 +122,7 @@ export default function HomeClient({ initialRows, initialError }) {
               <button
                 type="button"
                 onClick={forget}
-                title="다른 이름으로 참가하기"
+                title="이름 변경 (기존 기록도 새 이름으로 함께 옮겨집니다)"
                 className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] text-white/55 transition active:scale-95"
               >
                 이름 변경
@@ -117,10 +146,11 @@ export default function HomeClient({ initialRows, initialError }) {
 
           <button
             type="button"
-            onClick={() => router.push("/game")}
-            className="w-full rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-4 text-lg font-black text-night-900 shadow-lg shadow-moon-700/25 transition active:scale-[0.98]"
+            onClick={handleStart}
+            disabled={checking}
+            className="w-full rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-4 text-lg font-black text-night-900 shadow-lg shadow-moon-700/25 transition active:scale-[0.98] disabled:opacity-60"
           >
-            게임 시작하기
+            {checking ? "확인 중..." : "게임 시작하기"}
           </button>
         </div>
 
@@ -128,12 +158,36 @@ export default function HomeClient({ initialRows, initialError }) {
         <RankingBoard rows={rows} myRank={myRank} myName={name} error={error} />
       </div>
 
+      {closedMessage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-night-900/85 px-8 backdrop-blur-sm"
+          onClick={() => setClosedMessage("")}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[320px] animate-pop-in rounded-3xl border border-white/12 bg-gradient-to-b from-[#221c46] to-[#171334] p-6 text-center shadow-2xl"
+          >
+            <p className="text-5xl">⏰</p>
+            <p className="mt-4 text-base font-bold text-moon-100">{closedMessage}</p>
+            {period && <p className="mt-2 text-[11px] text-white/45">참여 기간 · {period}</p>}
+            <button
+              type="button"
+              onClick={() => setClosedMessage("")}
+              className="mt-5 w-full rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-3 text-sm font-black text-night-900 transition active:scale-[0.98]"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
       <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
 
       <AdminPanel
         open={adminOpen}
         onClose={() => setAdminOpen(false)}
         onChanged={() => refresh(name)}
+        onEventWindowChanged={(next) => setEventWindow(next)}
       />
     </main>
   );

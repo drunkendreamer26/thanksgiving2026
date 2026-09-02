@@ -112,11 +112,58 @@ export async function getBoard(rawName) {
 /* ------------------------------------------------------------------ */
 
 /**
+ * 이름을 바꿔 등록할 때, 변경 전 이름으로 저장돼 있던 기록을 새 이름으로 옮깁니다.
+ * - 새 이름의 기록이 없으면 옛 행의 이름만 바꿉니다 (player_key 는 자동 재계산).
+ * - 양쪽에 기록이 있으면 더 높은 점수만 새 이름 쪽에 남기고 옛 행은 지웁니다.
+ * 성공하면 null, 실패하면 오류 메시지를 돌려줍니다.
+ */
+async function migrateName(prevKey, name, key) {
+  const { data: old, error } = await supabaseAdmin
+    .from("scores")
+    .select("id, score, created_at")
+    .eq("player_key", prevKey)
+    .maybeSingle();
+
+  if (error) return error.message;
+  if (!old) return null; // 옮길 기록이 없으면 그냥 진행
+
+  const { data: target, error: targetError } = await supabaseAdmin
+    .from("scores")
+    .select("id, score")
+    .eq("player_key", key)
+    .maybeSingle();
+
+  if (targetError) return targetError.message;
+
+  if (!target) {
+    const { error: renameError } = await supabaseAdmin
+      .from("scores")
+      .update({ player_name: name })
+      .eq("id", old.id);
+    return renameError ? renameError.message : null;
+  }
+
+  if (old.score > target.score) {
+    const { error: mergeError } = await supabaseAdmin
+      .from("scores")
+      .update({ player_name: name, score: old.score, created_at: old.created_at })
+      .eq("id", target.id);
+    if (mergeError) return mergeError.message;
+  }
+
+  const { error: delError } = await supabaseAdmin.from("scores").delete().eq("id", old.id);
+  return delError ? delError.message : null;
+}
+
+/**
  * 게임 종료 후 이름과 점수를 등록합니다.
  * 같은 이름의 기존 최고점보다 높을 때만 score / created_at 을 갱신합니다.
  * (이름 기준으로 최고 점수가 누적됩니다.)
+ *
+ * rawPreviousName 이 있으면(= 이름을 바꿔 등록하는 경우) 변경 전 이름의 기록을
+ * 먼저 새 이름으로 옮긴 뒤 점수를 반영합니다.
  */
-export async function submitScore(rawName, rawScore) {
+export async function submitScore(rawName, rawScore, rawPreviousName) {
   const norm = parseName(rawName);
   if (norm.error) return fail(norm.error);
   if (!isAdminConfigured) {
@@ -127,6 +174,13 @@ export async function submitScore(rawName, rawScore) {
   if (!Number.isFinite(score) || score > 1_000_000) return fail("점수가 올바르지 않습니다.");
 
   const { name, key } = norm;
+
+  // 이름 변경 등록 → 변경 전 이름의 기록을 새 이름으로 먼저 옮깁니다
+  const prevKey = normalizeName(rawPreviousName).toLowerCase();
+  if (prevKey && prevKey !== key) {
+    const migrateError = await migrateName(prevKey, name, key);
+    if (migrateError) return fail(migrateError);
+  }
 
   const { data: existing, error: readError } = await supabaseAdmin
     .from("scores")
@@ -261,4 +315,60 @@ export async function adminExport(password) {
     ok: true,
     rows: (data ?? []).map((row, i) => ({ rank: i + 1, ...row })),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* 이벤트 참여 시간                                                      */
+/* ------------------------------------------------------------------ */
+
+const EVENT_CONFIG_ID = 1;
+
+/**
+ * 게임 참여 가능 시간(시작/종료)을 읽습니다. 공개 정보라 anon 키로 조회합니다.
+ * 설정이 없거나 조회에 실패하면 "제한 없음"으로 취급해 게임을 막지 않습니다.
+ */
+export async function getEventWindow() {
+  if (!isSupabaseConfigured) return { ok: true, startAt: null, endAt: null };
+
+  const { data, error } = await supabase
+    .from("event_config")
+    .select("start_at, end_at")
+    .eq("id", EVENT_CONFIG_ID)
+    .maybeSingle();
+
+  if (error || !data) return { ok: true, startAt: null, endAt: null };
+
+  return { ok: true, startAt: data.start_at ?? null, endAt: data.end_at ?? null };
+}
+
+/** 참여 시간 설정 저장. 빈 값(null)은 그 방향으로 제한하지 않는다는 뜻입니다. */
+export async function adminSetEventWindow(password, rawStart, rawEnd) {
+  const error = checkAdmin(password);
+  if (error) return fail(error);
+
+  const start = rawStart ? new Date(rawStart) : null;
+  const end = rawEnd ? new Date(rawEnd) : null;
+
+  if (start && Number.isNaN(start.getTime())) return fail("시작 일시가 올바르지 않습니다.");
+  if (end && Number.isNaN(end.getTime())) return fail("종료 일시가 올바르지 않습니다.");
+  if (start && end && end.getTime() <= start.getTime()) {
+    return fail("종료 일시는 시작 일시보다 뒤여야 합니다.");
+  }
+
+  const startAt = start ? start.toISOString() : null;
+  const endAt = end ? end.toISOString() : null;
+
+  const { error: writeError } = await supabaseAdmin
+    .from("event_config")
+    .upsert({
+      id: EVENT_CONFIG_ID,
+      start_at: startAt,
+      end_at: endAt,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (writeError) return fail(writeError.message);
+
+  revalidatePath("/");
+  return { ok: true, startAt, endAt };
 }

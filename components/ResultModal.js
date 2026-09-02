@@ -15,12 +15,22 @@ function grade(score) {
  * 게임 종료 오버레이.
  * - 이름이 아직 없으면 입력받아 등록 (등록과 동시에 이 기기에 기억)
  * - 이미 등록된 이름이 있으면 그 이름으로 바로 등록
+ * - 이름을 바꿔 등록하면 변경 전 이름으로 저장된 기록도 새 이름으로 함께 옮깁니다
  */
-export default function ResultModal({ score, level, savedName, onRegistered, onRetry, onDone }) {
+export default function ResultModal({
+  score,
+  level,
+  savedName,
+  previousName,
+  onRegistered,
+  onRetry,
+  onDone,
+}) {
   const [name, setName] = useState(savedName || "");
   const [editing, setEditing] = useState(!savedName);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [migrate, setMigrate] = useState(true);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef(null);
 
@@ -33,12 +43,17 @@ export default function ResultModal({ score, level, savedName, onRegistered, onR
   const g = grade(score);
   const done = Boolean(result);
 
+  // 옮겨올 기록의 주인 = 지금 기기에 등록돼 있던 이름
+  // (첫 화면에서 "이름 변경"을 눌렀다면 그때 남겨 둔 previousName)
+  const oldName = normalizeName(savedName || previousName || "");
+  const renaming = Boolean(oldName) && oldName.toLowerCase() !== cleaned.toLowerCase();
+
   function handleSubmit(e) {
     e?.preventDefault();
     if (!valid || pending || done) return;
     setError("");
     startTransition(async () => {
-      const res = await submitScore(cleaned, score);
+      const res = await submitScore(cleaned, score, renaming && migrate ? oldName : "");
       if (!res.ok) {
         setError(res.error);
         return;
@@ -91,6 +106,38 @@ export default function ResultModal({ score, level, savedName, onRegistered, onR
                 <p className="mt-1.5 text-[11px] text-white/40">
                   공백 없이 입력해 주세요. 같은 이름의 최고 점수만 랭킹에 반영됩니다.
                 </p>
+
+                {renaming && valid && (
+                  <div className="mt-2 rounded-xl bg-moon-500/10 px-3 py-2.5 text-left ring-1 ring-moon-500/25">
+                    {migrate ? (
+                      <>
+                        <p className="text-[11px] leading-relaxed text-moon-300">
+                          기존 <b>{oldName}</b> 님의 기록도 <b>{cleaned}</b> 으로 함께 옮깁니다.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setMigrate(false)}
+                          className="mt-1.5 text-[11px] text-white/45 underline underline-offset-2"
+                        >
+                          다른 사람인가요? 새 참가자로 등록하기
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[11px] leading-relaxed text-white/50">
+                          새 참가자로 등록합니다. <b>{oldName}</b> 님의 기록은 그대로 둡니다.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setMigrate(true)}
+                          className="mt-1.5 text-[11px] text-moon-300 underline underline-offset-2"
+                        >
+                          기존 기록을 새 이름으로 옮기기
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex items-center justify-between rounded-xl bg-white/[0.06] px-4 py-3">
