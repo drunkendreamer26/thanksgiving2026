@@ -20,7 +20,7 @@ export const ITEMS = [
   { key: "mugwort",   label: "쑥",         emoji: "🌿", type: ITEM_TYPES.GOOD,    points: 100, radius: 35, weight: 16 },
   { key: "moon",      label: "황금 보름달", emoji: "🌕", type: ITEM_TYPES.BONUS,   points: 300, radius: 42, weight: 6 },
   { key: "vip",       label: "그룹장 K", image: "/special.png", fallbackEmoji: "🌟",
-                                                        type: ITEM_TYPES.SPECIAL, points: 500, radius: 44, weight: 1 },
+                                                        type: ITEM_TYPES.SPECIAL, points: 1000, radius: 44, weight: 1 },
   { key: "burnt",     label: "탄 송편",     emoji: "🔥", type: ITEM_TYPES.BAD,     points: -150, radius: 36, weight: 10 },
   { key: "rotten",    label: "상한 재료",   emoji: "🥀", type: ITEM_TYPES.BAD,     points: -150, radius: 36, weight: 8 },
 ];
