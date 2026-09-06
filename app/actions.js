@@ -298,6 +298,25 @@ export async function adminDeleteByName(password, rawName) {
   return { ok: true, removed: data[0] };
 }
 
+/**
+ * 관리자 이름 검색용 전체 목록 (이름·점수).
+ * 초성 검색은 DB 로 넘기기 어려워, 목록을 한 번 받아 화면에서 걸러 냅니다.
+ */
+export async function adminListPlayers(password) {
+  const error = checkAdmin(password);
+  if (error) return fail(error);
+
+  const { data, error: readError } = await supabaseAdmin
+    .from("scores")
+    .select("player_name, score")
+    .order("score", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (readError) return fail(readError.message);
+
+  return { ok: true, rows: data ?? [] };
+}
+
 /** 전체 순위 내려받기용 데이터 (등수·이름·점수·등록일시) */
 export async function adminExport(password) {
   const error = checkAdmin(password);

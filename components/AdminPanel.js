@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   verifyAdmin,
   adminResetAll,
   adminDeleteByName,
   adminExport,
+  adminListPlayers,
   adminSetEventWindow,
   getEventWindow,
 } from "@/app/actions";
 import { formatScore, NAME_MAX } from "@/lib/constants";
 import { fromLocalInput, toLocalInput, formatEventWindow } from "@/lib/eventWindow";
+import { matchesSearch } from "@/lib/hangul";
 
 const DENY_MESSAGE = "아는 사람끼리 이러지 맙시다 ^_^";
+
+/** 검색 결과를 한 번에 보여줄 최대 인원 */
+const SEARCH_LIMIT = 30;
 
 function csvCell(value) {
   const s = String(value ?? "");
@@ -43,6 +48,7 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
   const [notice, setNotice] = useState(null); // { tone: "ok" | "bad", text }
   const [confirmReset, setConfirmReset] = useState(false);
   const [targetName, setTargetName] = useState("");
+  const [players, setPlayers] = useState([]);
   const [startInput, setStartInput] = useState("");
   const [endInput, setEndInput] = useState("");
   const [pending, startTransition] = useTransition();
@@ -57,11 +63,18 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
     setNotice(null);
     setConfirmReset(false);
     setTargetName("");
+    setPlayers([]);
     const t = setTimeout(() => inputRef.current?.focus(), 60);
     return () => clearTimeout(t);
   }, [open]);
 
-  // 인증에 성공하면 현재 설정된 참여 시간을 입력칸에 채워 둡니다
+  // 이름 검색에 쓸 전체 목록을 받아 둡니다 (기록이 바뀌면 다시 부릅니다)
+  const loadPlayers = useCallback(async () => {
+    const res = await adminListPlayers(password);
+    if (res.ok) setPlayers(res.rows);
+  }, [password]);
+
+  // 인증에 성공하면 참여 시간과 이름 목록을 미리 받아 둡니다
   useEffect(() => {
     if (step !== "panel") return;
     let alive = true;
@@ -70,10 +83,17 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
       setStartInput(toLocalInput(res.startAt));
       setEndInput(toLocalInput(res.endAt));
     });
+    loadPlayers();
     return () => {
       alive = false;
     };
-  }, [step]);
+  }, [step, loadPlayers]);
+
+  // 입력칸은 검색어를 겸합니다. 비어 있으면 전체를 보여줍니다.
+  const matched = useMemo(() => {
+    const q = targetName.trim();
+    return q ? players.filter((p) => matchesSearch(p.player_name, q)) : players;
+  }, [players, targetName]);
 
   if (!open) return null;
 
@@ -114,7 +134,10 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
     setConfirmReset(false);
     run(
       () => adminResetAll(password),
-      (res) => setNotice({ tone: "ok", text: `전체 기록 ${res.deleted}건을 삭제했습니다.` })
+      (res) => {
+        setNotice({ tone: "ok", text: `전체 기록 ${res.deleted}건을 삭제했습니다.` });
+        setPlayers([]);
+      }
     );
   }
 
@@ -128,6 +151,7 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
           text: `'${res.removed.player_name}' (${formatScore(res.removed.score)}점) 기록을 삭제했습니다.`,
         });
         setTargetName("");
+        loadPlayers();
       }
     );
   }
@@ -319,7 +343,10 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
           <section className="rounded-2xl bg-white/[0.05] p-4">
             <p className="text-sm font-bold text-moon-100">2. 이름으로 기록 삭제</p>
             <p className="mt-1 text-[11px] leading-relaxed text-white/45">
-              대소문자는 구분하지 않습니다.
+              이름을 입력하면 아래에서 찾아 줍니다. 대소문자는 구분하지 않고,
+              초성으로도 찾을 수 있습니다. (예: <b className="text-white/70">김삼점</b> →{" "}
+              <b className="text-white/70">ㄱㅅ</b>) 초성은 붙어 있는 글자만 맞으므로{" "}
+              <b className="text-white/70">ㄱㅈ</b> 로는 찾을 수 없습니다.
             </p>
             <div className="mt-3 flex gap-2">
               <input
@@ -327,7 +354,7 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
                 value={targetName}
                 onChange={(e) => setTargetName(e.target.value)}
                 maxLength={NAME_MAX}
-                placeholder="삭제할 이름"
+                placeholder="이름 또는 초성으로 검색"
                 autoComplete="off"
                 className="min-w-0 flex-1 rounded-xl border border-white/15 bg-night-900/70 px-3 py-2.5 text-sm text-moon-100 placeholder:text-white/35 outline-none focus:border-moon-500/70"
               />
@@ -340,6 +367,45 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
                 삭제
               </button>
             </div>
+
+            {/* 검색 결과 — 누르면 위 입력칸에 정확한 이름이 채워집니다 */}
+            <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-night-900/40">
+              {matched.length === 0 ? (
+                <p className="px-3 py-3 text-center text-[11px] text-white/40">
+                  {players.length === 0 ? "등록된 기록이 없습니다." : "일치하는 이름이 없습니다."}
+                </p>
+              ) : (
+                <ul className="divide-y divide-white/[0.06]">
+                  {matched.slice(0, SEARCH_LIMIT).map((p) => {
+                    const picked = p.player_name === targetName.trim();
+                    return (
+                      <li key={p.player_name}>
+                        <button
+                          type="button"
+                          onClick={() => setTargetName(p.player_name)}
+                          className={[
+                            "flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition active:scale-[0.99]",
+                            picked ? "bg-moon-500/15" : "hover:bg-white/[0.06]",
+                          ].join(" ")}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-xs font-bold text-moon-100">
+                            {p.player_name}
+                          </span>
+                          <span className="shrink-0 text-[11px] tabular-nums text-white/45">
+                            {formatScore(p.score)}점
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <p className="mt-1.5 text-right text-[10px] text-white/35">
+              {matched.length > SEARCH_LIMIT
+                ? `${matched.length}명 중 ${SEARCH_LIMIT}명 표시`
+                : `${matched.length}명`}
+            </p>
           </section>
 
           {/* 3. 게임 참여 시간 */}
