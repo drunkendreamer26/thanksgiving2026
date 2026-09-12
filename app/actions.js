@@ -46,9 +46,10 @@ export async function getTopScores(limit = TOP_N) {
 }
 
 /**
- * 특정 이름의 최고 점수와 등수.
+ * 특정 이름의 최고 점수와 등수, 그리고 전체 참가자 수.
  * 등수 = (나보다 점수가 높은 사람 수) + (동점이면서 먼저 달성한 사람 수) + 1
  * → 랭킹보드 정렬(score desc, created_at asc)과 정확히 일치합니다.
+ * total = 랭킹에 오른 참가자 수(0점은 제외) → "N명 중 M위" 표시에 씁니다.
  */
 export async function getMyRank(rawName) {
   if (!isSupabaseConfigured) return fail("Supabase 환경변수가 설정되지 않았습니다.");
@@ -56,14 +57,19 @@ export async function getMyRank(rawName) {
   const key = normalizeName(rawName).toLowerCase();
   if (!key) return fail("이름이 없습니다.");
 
-  const { data: me, error } = await supabase
-    .from("scores")
-    .select(SELECT_PUBLIC)
-    .eq("player_key", key)
-    .maybeSingle();
+  // 내 기록과 전체 참가자 수는 서로 독립이므로 함께 조회합니다
+  const [meRes, totalRes] = await Promise.all([
+    supabase.from("scores").select(SELECT_PUBLIC).eq("player_key", key).maybeSingle(),
+    supabase.from("scores").select("*", { count: "exact", head: true }).gt("score", 0),
+  ]);
 
-  if (error) return fail(error.message);
-  if (!me || me.score <= 0) return { ok: true, ranked: false, score: me?.score ?? 0 };
+  if (meRes.error) return fail(meRes.error.message);
+  if (totalRes.error) return fail(totalRes.error.message);
+
+  const total = totalRes.count ?? 0;
+  const me = meRes.data;
+
+  if (!me || me.score <= 0) return { ok: true, ranked: false, score: me?.score ?? 0, total };
 
   // 두 카운트는 서로 독립이므로 병렬로 실행합니다
   const [higher, tiedEarlier] = await Promise.all([
@@ -82,6 +88,7 @@ export async function getMyRank(rawName) {
     ok: true,
     ranked: true,
     rank: (higher.count ?? 0) + (tiedEarlier.count ?? 0) + 1,
+    total,
     player_name: me.player_name,
     score: me.score,
     created_at: me.created_at,
@@ -210,6 +217,7 @@ export async function submitScore(rawName, rawScore, rawPreviousName) {
       updated: true,
       best: score,
       rank: mine.ok && mine.ranked ? mine.rank : null,
+      total: mine.ok ? mine.total : null,
     };
   }
 
@@ -232,6 +240,7 @@ export async function submitScore(rawName, rawScore, rawPreviousName) {
     updated,
     best: updated ? score : existing.score,
     rank: mine.ok && mine.ranked ? mine.rank : null,
+    total: mine.ok ? mine.total : null,
   };
 }
 

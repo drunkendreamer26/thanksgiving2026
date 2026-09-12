@@ -109,7 +109,17 @@ export default function HomeClient({ initialRows, initialError, initialEventWind
         {ready && name && (
           <div className="flex animate-pop-in items-center justify-between rounded-2xl border border-white/10 bg-night-800/90 px-4 py-3.5 shadow-lg shadow-night-900/40 backdrop-blur-md">
             <div className="min-w-0">
-              <p className="text-[11px] text-white/45">참가자</p>
+              {/* 카드 높이를 늘리지 않도록 "참가자" 라벨 줄에 순위를 함께 적습니다 */}
+              <p className="truncate whitespace-nowrap text-[11px] text-white/45">
+                참가자
+                {myRank?.total ? (
+                  myRank.ranked ? (
+                    <span className="font-bold text-moon-500"> · {myRank.total}명 중 {myRank.rank}위</span>
+                  ) : (
+                    <span> · {myRank.total}명 참여 중</span>
+                  )
+                ) : null}
+              </p>
               <p className="truncate text-base font-bold text-moon-100">{name}</p>
             </div>
             <div className="flex items-center gap-3">

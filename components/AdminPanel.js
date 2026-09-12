@@ -16,9 +16,6 @@ import { matchesSearch } from "@/lib/hangul";
 
 const DENY_MESSAGE = "아는 사람끼리 이러지 맙시다 ^_^";
 
-/** 검색 결과를 한 번에 보여줄 최대 인원 */
-const SEARCH_LIMIT = 30;
-
 function csvCell(value) {
   const s = String(value ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -89,11 +86,15 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
     };
   }, [step, loadPlayers]);
 
+  // 목록은 점수 내림차순으로 내려오므로 순서가 곧 등수입니다.
+  // (검색으로 걸러도 등수는 전체 기준으로 유지됩니다)
+  const ranked = useMemo(() => players.map((p, i) => ({ ...p, rank: i + 1 })), [players]);
+
   // 입력칸은 검색어를 겸합니다. 비어 있으면 전체를 보여줍니다.
   const matched = useMemo(() => {
     const q = targetName.trim();
-    return q ? players.filter((p) => matchesSearch(p.player_name, q)) : players;
-  }, [players, targetName]);
+    return q ? ranked.filter((p) => matchesSearch(p.player_name, q)) : ranked;
+  }, [ranked, targetName]);
 
   if (!open) return null;
 
@@ -368,15 +369,15 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
               </button>
             </div>
 
-            {/* 검색 결과 — 누르면 위 입력칸에 정확한 이름이 채워집니다 */}
-            <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-night-900/40">
+            {/* 검색 결과 — 전원이 등수와 함께 나오고, 누르면 위 입력칸에 이름이 채워집니다 */}
+            <div className="mt-2 max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-night-900/40">
               {matched.length === 0 ? (
                 <p className="px-3 py-3 text-center text-[11px] text-white/40">
                   {players.length === 0 ? "등록된 기록이 없습니다." : "일치하는 이름이 없습니다."}
                 </p>
               ) : (
                 <ul className="divide-y divide-white/[0.06]">
-                  {matched.slice(0, SEARCH_LIMIT).map((p) => {
+                  {matched.map((p) => {
                     const picked = p.player_name === targetName.trim();
                     return (
                       <li key={p.player_name}>
@@ -388,6 +389,9 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
                             picked ? "bg-moon-500/15" : "hover:bg-white/[0.06]",
                           ].join(" ")}
                         >
+                          <span className="w-8 shrink-0 text-[11px] font-bold tabular-nums text-moon-500/80">
+                            {p.rank}위
+                          </span>
                           <span className="min-w-0 flex-1 truncate text-xs font-bold text-moon-100">
                             {p.player_name}
                           </span>
@@ -402,9 +406,9 @@ export default function AdminPanel({ open, onClose, onChanged, onEventWindowChan
               )}
             </div>
             <p className="mt-1.5 text-right text-[10px] text-white/35">
-              {matched.length > SEARCH_LIMIT
-                ? `${matched.length}명 중 ${SEARCH_LIMIT}명 표시`
-                : `${matched.length}명`}
+              {matched.length === players.length
+                ? `전체 ${players.length}명`
+                : `전체 ${players.length}명 중 ${matched.length}명`}
             </p>
           </section>
 

@@ -4,6 +4,14 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { submitScore } from "@/app/actions";
 import { formatScore, NAME_MAX, NAME_PATTERN, normalizeName } from "@/lib/constants";
 
+/**
+ * 게임이 끝난 직후에는 아직 손가락이 화면을 연타하고 있습니다.
+ * 그 터치가 버튼을 눌러 버리지 않도록 잠깐 모든 입력을 막아 둡니다.
+ */
+const ARM_MS = 1300;
+/** 등록을 마친 뒤 다음 선택지가 열리기까지의 짧은 잠금 */
+const ARM_AFTER_SUBMIT_MS = 500;
+
 function grade(score) {
   if (score >= 4000) return { emoji: "🏆", text: "달토끼 명장!" };
   if (score >= 2500) return { emoji: "🌕", text: "송편 장인" };
@@ -11,10 +19,22 @@ function grade(score) {
   return { emoji: "🌱", text: "다시 도전!" };
 }
 
+/** step 이 바뀔 때마다 ms 동안 입력을 잠급니다. */
+function useInputLock(step, ms) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    setArmed(false);
+    const t = setTimeout(() => setArmed(true), ms);
+    return () => clearTimeout(t);
+  }, [step, ms]);
+  return armed;
+}
+
 /**
  * 게임 종료 오버레이.
- * - 이름이 아직 없으면 입력받아 등록 (등록과 동시에 이 기기에 기억)
- * - 이미 등록된 이름이 있으면 그 이름으로 바로 등록
+ * - 뜨자마자 잠깐(ARM_MS) 터치를 먹어 버려서, 연타로 화면이 넘어가는 것을 막습니다
+ * - 이름을 넣고 "점수 등록하기"를 눌러야 다음 게임 / 나가기 선택지가 열립니다
+ * - 등록 없이 나가려면 한 번 더 확인을 받습니다 (실수로 기록을 날리지 않도록)
  * - 이름을 바꿔 등록하면 변경 전 이름으로 저장된 기록도 새 이름으로 함께 옮깁니다
  */
 export default function ResultModal({
@@ -31,17 +51,22 @@ export default function ResultModal({
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [migrate, setMigrate] = useState(true);
+  const [confirmExit, setConfirmExit] = useState(false);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef(null);
-
-  useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
 
   const cleaned = normalizeName(name);
   const valid = NAME_PATTERN.test(cleaned);
   const g = grade(score);
   const done = Boolean(result);
+
+  // 등록 전/후로 단계가 바뀔 때마다 다시 짧게 잠급니다.
+  // (등록 버튼을 두 번 두드린 손가락이 곧바로 "한 번 더 하기"를 누르는 것도 막힙니다)
+  const armed = useInputLock(done ? "done" : "input", done ? ARM_AFTER_SUBMIT_MS : ARM_MS);
+
+  useEffect(() => {
+    if (editing && armed && !done) inputRef.current?.focus();
+  }, [editing, armed, done]);
 
   // 옮겨올 기록의 주인 = 지금 기기에 등록돼 있던 이름
   // (첫 화면에서 "이름 변경"을 눌렀다면 그때 남겨 둔 previousName)
@@ -50,7 +75,7 @@ export default function ResultModal({
 
   function handleSubmit(e) {
     e?.preventDefault();
-    if (!valid || pending || done) return;
+    if (!armed || !valid || pending || done) return;
     setError("");
     startTransition(async () => {
       const res = await submitScore(cleaned, score, renaming && migrate ? oldName : "");
@@ -60,12 +85,11 @@ export default function ResultModal({
       }
       setResult(res);
       onRegistered(res.name); // 이 세션(기기)에 이름 기억
-      setTimeout(onDone, 1300); // 안내를 잠깐 보여준 뒤 랭킹보드로 이동
     });
   }
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-night-900/85 px-6 backdrop-blur-sm">
+    <div className="no-touch-callout absolute inset-0 z-40 flex items-center justify-center bg-night-900/85 px-6 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-[360px] animate-pop-in rounded-3xl border border-white/12 bg-gradient-to-b from-[#221c46] to-[#171334] p-6 text-center shadow-2xl"
@@ -99,9 +123,10 @@ export default function ResultModal({
                   value={name}
                   onChange={(e) => setName(normalizeName(e.target.value).slice(0, NAME_MAX))}
                   maxLength={NAME_MAX}
+                  disabled={!armed}
                   placeholder="이름을 입력하세요 (공백 없이 최대 12자)"
                   autoComplete="off"
-                  className="w-full rounded-xl border border-white/15 bg-night-900/70 px-4 py-3 text-center text-base text-moon-100 placeholder:text-white/35 outline-none focus:border-moon-500/70 focus:ring-2 focus:ring-moon-500/25"
+                  className="w-full rounded-xl border border-white/15 bg-night-900/70 px-4 py-3 text-center text-base text-moon-100 placeholder:text-white/35 outline-none focus:border-moon-500/70 focus:ring-2 focus:ring-moon-500/25 disabled:opacity-50"
                 />
                 <p className="mt-1.5 text-[11px] text-white/40">
                   공백 없이 입력해 주세요. 같은 이름의 최고 점수만 랭킹에 반영됩니다.
@@ -117,6 +142,7 @@ export default function ResultModal({
                         <button
                           type="button"
                           onClick={() => setMigrate(false)}
+                          disabled={!armed}
                           className="mt-1.5 text-[11px] text-white/45 underline underline-offset-2"
                         >
                           다른 사람인가요? 새 참가자로 등록하기
@@ -130,6 +156,7 @@ export default function ResultModal({
                         <button
                           type="button"
                           onClick={() => setMigrate(true)}
+                          disabled={!armed}
                           className="mt-1.5 text-[11px] text-moon-300 underline underline-offset-2"
                         >
                           기존 기록을 새 이름으로 옮기기
@@ -147,7 +174,8 @@ export default function ResultModal({
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
-                    className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-white/55 transition active:scale-95"
+                    disabled={!armed}
+                    className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-white/55 transition active:scale-95 disabled:opacity-40"
                   >
                     변경
                   </button>
@@ -165,7 +193,11 @@ export default function ResultModal({
             <br />
             <span className="text-white/65">
               {result.name} 님의 최고점 {formatScore(result.best)}점
-              {result.rank ? ` · 현재 ${result.rank}위` : ""}
+              {result.rank
+                ? result.total
+                  ? ` · ${result.total}명 중 ${result.rank}위`
+                  : ` · 현재 ${result.rank}위`
+                : ""}
             </span>
           </p>
         )}
@@ -174,35 +206,103 @@ export default function ResultModal({
           <p className="mt-3 rounded-xl bg-hanbok/15 px-3 py-2.5 text-xs text-hanbok">{error}</p>
         )}
 
-        <div className="mt-5 space-y-2">
-          <button
-            type="submit"
-            disabled={!valid || pending || done}
-            className="w-full rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-3.5 text-base font-black text-night-900 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {done ? "등록 완료! 이동 중..." : pending ? "등록 중..." : "점수 등록하기"}
-          </button>
-
-          <div className="flex gap-2">
+        {/* ---------------- 버튼 ---------------- */}
+        {done ? (
+          // 등록을 마친 뒤에야 다음 게임 / 나가기를 고를 수 있습니다
+          <div className="mt-5 space-y-2">
             <button
               type="button"
               onClick={onRetry}
-              disabled={pending || done}
-              className="flex-1 rounded-2xl border border-white/15 py-3 text-sm font-bold text-moon-100 transition active:scale-[0.98] disabled:opacity-40"
+              disabled={!armed}
+              className="w-full rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-3.5 text-base font-black text-night-900 transition active:scale-[0.98] disabled:opacity-45"
             >
-              다시 하기
+              한 번 더 하기
             </button>
             <button
               type="button"
               onClick={onDone}
-              disabled={pending || done}
-              className="flex-1 rounded-2xl border border-white/15 py-3 text-sm font-bold text-white/60 transition active:scale-[0.98] disabled:opacity-40"
+              disabled={!armed}
+              className="w-full rounded-2xl border border-white/15 py-3 text-sm font-bold text-moon-100 transition active:scale-[0.98] disabled:opacity-40"
+            >
+              랭킹 보러 가기
+            </button>
+          </div>
+        ) : confirmExit ? (
+          // 등록 없이 나가기 — 실수로 기록을 날리지 않도록 한 번 더 확인
+          <div className="mt-5">
+            <p className="rounded-xl bg-hanbok/10 px-3 py-2.5 text-[11px] leading-relaxed text-hanbok ring-1 ring-hanbok/25">
+              등록하지 않고 나가면 이번 <b>{formatScore(score)}점</b>은 사라집니다.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmExit(false)}
+                className="flex-1 rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-3 text-sm font-black text-night-900 transition active:scale-[0.98]"
+              >
+                계속 등록하기
+              </button>
+              <button
+                type="button"
+                onClick={onDone}
+                className="flex-1 rounded-2xl border border-white/15 py-3 text-sm font-bold text-white/60 transition active:scale-[0.98]"
+              >
+                그냥 나가기
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 space-y-2">
+            <button
+              type="submit"
+              disabled={!armed || !valid || pending}
+              className="w-full rounded-2xl bg-gradient-to-r from-moon-500 to-moon-700 py-3.5 text-base font-black text-night-900 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {pending ? "등록 중..." : "점수 등록하기"}
+            </button>
+            <p className="text-[11px] text-white/40">
+              점수를 등록해야 다음 게임으로 넘어갈 수 있어요.
+            </p>
+            <button
+              type="button"
+              onClick={() => setConfirmExit(true)}
+              disabled={!armed || pending}
+              className="w-full rounded-2xl border border-white/12 py-2.5 text-xs font-bold text-white/45 transition active:scale-[0.98] disabled:opacity-30"
             >
               등록 없이 나가기
             </button>
           </div>
-        </div>
+        )}
       </form>
+
+      {/* 연타 방지 장막: 이 위를 아무리 두드려도 아래 버튼에는 닿지 않습니다 */}
+      {!armed && (
+        <div
+          aria-hidden
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          style={{ touchAction: "none" }}
+          className="absolute inset-0 z-50 flex items-end justify-center pb-[max(24px,env(safe-area-inset-bottom))]"
+        >
+          {!done && (
+            <div className="animate-pop-in rounded-2xl bg-night-900/85 px-4 py-3 text-center ring-1 ring-white/10">
+              <p className="text-xs font-bold text-moon-300">✋ 잠깐 멈춰 주세요</p>
+              <p className="mt-1 text-[11px] text-white/45">곧 이름을 입력할 수 있어요</p>
+              <div className="mt-2 h-1 w-40 overflow-hidden rounded-full bg-white/12">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-moon-300 to-moon-700"
+                  style={{ animation: `lock-bar ${ARM_MS}ms linear forwards` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
